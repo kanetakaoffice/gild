@@ -588,7 +588,7 @@ function renderMembers() {
   const chip = (key, val, label) => `<button class="chip ${ui[key] === val ? "on" : ""}" onclick="ui.${key}='${val}';renderMembers()">${label}</button>`;
   $("v-members").innerHTML = pbar("会員一覧", `<button class="btn hide-sp" onclick="exportCSV()">CSVで書き出し</button><button class="btn" onclick="openBulk()">まとめて登録</button><button class="btn" onclick="openSched()">MTG予定をまとめて登録</button><button class="btn gold" onclick="openMember()">＋ 会員を追加</button>`) + `
   <div class="toolbar">
-    <input type="search" placeholder="名前・あだ名・サロンNo・メールで検索" value="${esc(ui.search)}" oninput="ui.search=this.value;renderMembersTable()">
+    <input type="search" placeholder="名前・サロン名・サロンNo・メールで検索" value="${esc(ui.search)}" oninput="ui.search=this.value;renderMembersTable()">
   </div>
   <div class="toolbar">
     <div class="chips">${chip("course", "all", "すべてのコース")}${chip("course", "store", "店舗")}${chip("course", "online", "電脳")}${chip("course", "both", "両方")}${chip("course", "none", "未設定")}</div>
@@ -616,7 +616,7 @@ function renderMembersTable(list) {
   const k = curYM();
   $("memTable").innerHTML = list.length ? `
   <div class="scroll"><table class="tbl">
-    <tr>${[["no", "No"], ["kana", "氏名"]].map(([k, l]) => sortTh(k, l)).join("")}<th>あだ名</th><th>コース</th>${sortTh("next", "次回MTG")}${sortTh("last", "前回MTG", "hide-sp")}<th>今月</th><th>未対応</th></tr>
+    <tr>${[["no", "No"], ["kana", "氏名"]].map(([k, l]) => sortTh(k, l)).join("")}<th>サロン名</th><th>コース</th>${sortTh("next", "次回MTG")}${sortTh("last", "前回MTG", "hide-sp")}<th>今月</th><th>未対応</th></tr>
     ${list.map(m => {
       const c = openCare(m.id).length;
       const pay = !monthApplies(m, k) ? `<span class="tag t-gray">対象外</span>` : isPaid(m.id, k) ? `<span class="tag t-green">済</span>` : `<span class="tag t-red">未</span>`;
@@ -641,7 +641,7 @@ function renderDetail() {
   <div class="card">
     <div class="dhead">
       <div><div class="big">${esc(m.name)}${stTag(m.status)}</div>
-      <div class="nick">${m.nick ? "あだ名：" + esc(m.nick) : ""}</div></div>
+      <div class="nick">${m.nick ? "サロン名：" + esc(m.nick) : ""}</div></div>
       <div style="margin-left:auto;display:flex;gap:8px"><button class="btn" onclick="openMember('${id}')">編集</button><button class="btn gold" onclick="openMeeting('${id}')">＋ ミーティング記録</button></div>
     </div>
     <dl class="kv">
@@ -860,7 +860,7 @@ function delArrear(aid) {
   confirmBox("この未入金の記録を削除しますか？", async () => { delete state.arrears[aid]; render(); toast("削除しました"); await save("DELETE", `arrears/${aid}`); });
 }
 function exportArrCSV() {
-  const head = ["サロンNo", "氏名", "あだ名", "聞き取り", "取引日", "商品", "個数", "単価", "金額", "状態", "精算日", "精算者", "証拠", "証拠の保管場所・補足", "メモ"];
+  const head = ["サロンNo", "氏名", "サロン名", "聞き取り", "取引日", "商品", "個数", "単価", "金額", "状態", "精算日", "精算者", "証拠", "証拠の保管場所・補足", "メモ"];
   const rows = Object.values(state.arrears).map(x => { const m = state.members[x.memberId] || {}; return [m.salonNo, m.name, m.nick, CHECK[m.gainCheck || "unchecked"], x.date || "日付不明", x.item, x.qty, x.unitPrice, amtUnknown(x) ? "金額未確定" : arrAmt(x), ARR_ST[x.status || "unpaid"], x.settledDate, x.settledBy, evState(x) === "have" ? (x.evidence || []).filter(k => EVID[k]).map(k => EVID[k]).join("・") : evState(x) === "none" ? "存在しない" : evState(x) === "requested" ? "提出を依頼中" : "未収集", x.evidenceNote, x.note]; })
     .sort((a, b) => String(a[0] || "~").localeCompare(String(b[0] || "~"), "ja", { numeric: true }) || String(a[4]).localeCompare(String(b[4])));
   const csv = [head, ...rows].map(r => r.map(v => `"${String(v ?? "").replace(/"/g, '""')}"`).join(",")).join("\r\n");
@@ -948,7 +948,7 @@ function openMember(id) {
     <div class="f2"><div class="f"><label>サロンナンバー</label><input id="fNo" value="${esc(m.salonNo)}"></div><div></div></div>
     <div class="f2"><div class="f"><label>氏名 *</label><input id="fName" value="${esc(m.name)}"></div>
     <div class="f"><label>ふりがな（並び替え用）</label><input id="fKana" value="${esc(m.kana)}"></div></div>
-    <div class="f2"><div class="f"><label>サロン内のあだ名</label><input id="fNick" value="${esc(m.nick)}"></div>
+    <div class="f2"><div class="f"><label>サロン名</label><input id="fNick" value="${esc(m.nick)}"></div>
     <div class="f"><label>コース</label><select id="fCourse">${Object.entries(COURSES).map(([k, v]) => `<option value="${k}" ${m.course === k ? "selected" : ""}>${v}</option>`).join("")}</select></div></div>
     <div class="f2"><div class="f"><label>入会日</label><input id="fJoin" type="date" value="${esc(m.joinDate)}"></div>
     <div class="f"><label>状態</label><select id="fStatus">${Object.entries(STATUS).map(([k, v]) => `<option value="${k}" ${(m.status || "active") === k ? "selected" : ""}>${v}</option>`).join("")}</select></div></div>
@@ -1079,9 +1079,9 @@ function previewSched() {
   const { rows, bad } = parseSched();
   const lab = r => r.kind === "next" ? `<span class="tag t-blue" style="background:var(--blue-soft);color:var(--blue)">次回予定</span> ${fmtDY(r.date)}${r.time ? " " + r.time + "〜" : ""}`
     : r.kind === "done" ? `<span class="tag t-green">実施済み</span> ${fmtDY(r.date)}${r.time ? " " + r.time + "〜" : ""}` : `<span class="tag t-green">実施済み</span> <span class="tag t-orange">日付不明</span>`;
-  $("schPrev").innerHTML = `<div class="hint" style="margin-bottom:6px">${rows.length}人分を読み取りました。名前とあだ名が合っているか確認してから「登録」を押してください。</div>
+  $("schPrev").innerHTML = `<div class="hint" style="margin-bottom:6px">${rows.length}人分を読み取りました。名前とサロン名が合っているか確認してから「登録」を押してください。</div>
     <div class="scroll" style="max-height:260px;overflow:auto;border:1px solid var(--line);border-radius:8px"><table class="tbl" style="border:0">
-    <tr><th>No</th><th>氏名（あだ名）</th><th>登録内容</th><th>担当</th></tr>
+    <tr><th>No</th><th>氏名（サロン名）</th><th>登録内容</th><th>担当</th></tr>
     ${rows.map(r => `<tr><td>${esc(r.m.salonNo)}</td><td>${esc(r.m.name)}${r.m.nick ? `（${esc(r.m.nick)}）` : ""}</td><td>${lab(r)}</td><td>${esc(r.host)}</td></tr>`).join("")}</table></div>
     ${bad.length ? `<div class="err" style="margin-top:8px">読み取れなかった行：<br>${bad.map(esc).join("<br>")}</div>` : ""}`;
   $("schGo").disabled = !rows.length;
@@ -1108,9 +1108,9 @@ async function doSched() {
 function openBulk() {
   modal(`<h3>会員をまとめて登録</h3>
     <p class="hint">1行目に見出し、2行目から1行に1人ずつ、タブ区切り（スプレッドシートからのコピー）かカンマ区切りで貼り付けます。<br>
-    使える見出し：<b>サロンNo・氏名・ふりがな・あだ名・コース・状態・メール・電話・入会日・月額</b>（順番は自由、氏名以外は省略可）<br>
+    使える見出し：<b>サロンNo・氏名・ふりがな・サロン名・コース・状態・メール・電話・入会日・月額</b>（順番は自由、氏名以外は省略可）<br>
     コースは「店舗のみ／電脳のみ／店舗+電脳／未設定」、状態は「通常／一時停止／退会」。<br>同じサロンNoの会員がすでにいる場合は登録しません（二重登録の防止）。</p>
-    <div class="f"><textarea id="bulkTxt" style="min-height:220px" placeholder="サロンNo&#9;氏名&#9;ふりがな&#9;あだ名&#9;コース&#9;状態&#9;メール&#9;電話&#9;入会日&#10;0049&#9;山田 太郎&#9;やまだ たろう&#9;たろう&#9;未設定&#9;通常&#9;xxx@example.com&#9;09000000000&#9;2026/10/19"></textarea></div>
+    <div class="f"><textarea id="bulkTxt" style="min-height:220px" placeholder="サロンNo&#9;氏名&#9;ふりがな&#9;サロン名&#9;コース&#9;状態&#9;メール&#9;電話&#9;入会日&#10;0049&#9;山田 太郎&#9;やまだ たろう&#9;たろう&#9;未設定&#9;通常&#9;xxx@example.com&#9;09000000000&#9;2026/10/19"></textarea></div>
     <div class="mact"><button class="btn" onclick="closeModal()">キャンセル</button><button class="btn pri" onclick="doBulk()">登録</button></div>`);
 }
 function normCourse(v) {
@@ -1156,7 +1156,7 @@ async function doBulk() {
 }
 function exportCSV() {
   const k = curYM();
-  const head = ["サロンNo", "氏名", "ふりがな", "あだ名", "コース", "状態", "入会日", "入会金", "入会金支払い", "月額", `${k}支払い`, "次回MTG", "前回MTG", "運営側でやること（未対応）", "メール", "電話番号", "LINE名など", "メモ", "紹介者", "契約書", "締結日", "目標", "今の状況", "注意・違反の件数"];
+  const head = ["サロンNo", "氏名", "ふりがな", "サロン名", "コース", "状態", "入会日", "入会金", "入会金支払い", "月額", `${k}支払い`, "次回MTG", "前回MTG", "運営側でやること（未対応）", "メール", "電話番号", "LINE名など", "メモ", "紹介者", "契約書", "締結日", "目標", "今の状況", "注意・違反の件数"];
   const rows = membersArr().map(m => [m.salonNo, m.name, m.kana, m.nick, COURSES[m.course], STATUS[m.status || "active"], m.joinDate, m.entryFee, m.entryPaid ? "済" : "未", m.fee, isPaid(m.id, k) ? "済" : "未", m.nextMtg, lastMtg(m.id), openCare(m.id).length, m.email, m.phone, m.contact, m.memo, refName(m), CONTRACT[m.contractStatus || "none"], m.contractDate, m.goal, m.progress, warnCount(m.id)]);
   const csv = [head, ...rows].map(r => r.map(v => `"${String(v ?? "").replace(/"/g, '""')}"`).join(",")).join("\r\n");
   const a = document.createElement("a");
