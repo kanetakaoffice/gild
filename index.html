@@ -284,7 +284,10 @@ const CONFIG = {
 
 const DEMO = !CONFIG.apiKey || !CONFIG.databaseURL;
 const COURSES = { none: "未設定", store: "店舗", online: "電脳", both: "店舗・電脳" };
-const STATUS = { active: "在籍", paused: "休会", left: "退会" };
+const STATUS = { active: "在籍", leaving: "退会予定", paused: "休会", left: "退会" };
+const LEAVE_CHECKS = { date: "退会日を確定した", pay: "月額などの支払いを精算した", gild: "gild.lifeのアカウントを停止した", line: "グループLINEの退出を確認した", gain: "GAIN未入金の聞き取りが済んでいる" };
+const leaveDone = m => Object.keys(LEAVE_CHECKS).filter(k => m.leaveChecks?.[k]).length;
+const stTag = st => st && st !== "active" ? ` <span class="tag ${st === "leaving" ? "t-orange" : "t-gray"}">${STATUS[st]}</span>` : "";
 
 let state = { members: {}, meetings: {}, payments: {}, arrears: {} };
 const CHECK = { unchecked: "未確認", has: "未入金あり", none: "未入金なし" };
@@ -459,7 +462,7 @@ const isPaid = (id, k) => !!state.payments[id]?.[k];
 function monthApplies(m, k) {
   // 入会月以降で、退会していない月だけ支払い対象にする
   if (m.joinDate && k < ym(m.joinDate)) return false;
-  if (m.status === "left" && m.leftDate && k > ym(m.leftDate)) return false;
+  if ((m.status === "left" || m.status === "leaving") && m.leftDate && k > ym(m.leftDate)) return false;
   if (m.status === "left" && !m.leftDate) return false;
   return true;
 }
@@ -493,7 +496,8 @@ function renderHome() {
   act.forEach(m => openCare(m.id).forEach(x => cares.push({ m, x })));
   cares.sort((a, b) => (b.x.date || "").localeCompare(a.x.date || ""));
   const k = curYM();
-  const unpaid = active.filter(m => monthApplies(m, k) && !isPaid(m.id, k)).sort(byNo);
+  const unpaid = act.filter(m => ["active", "leaving", undefined].includes(m.status) && monthApplies(m, k) && !isPaid(m.id, k)).sort(byNo);
+  const leaving = act.filter(m => m.status === "leaving").sort((a, b) => (a.leftDate || "9999").localeCompare(b.leftDate || "9999"));
   const idle = active.filter(m => !m.nextMtg && (!hasMtg(m.id) || (lastMtg(m.id) && daysFrom(lastMtg(m.id)) <= -CONFIG.idleDays))).sort(byNo);
   const sched = act.filter(m => m.nextMtg && daysFrom(m.nextMtg) <= 6).sort((a, b) => (a.nextMtg + (a.nextMtgTime || "99")).localeCompare(b.nextMtg + (b.nextMtgTime || "99")));
   const overdue = sched.filter(m => daysFrom(m.nextMtg) < 0), week = sched.filter(m => daysFrom(m.nextMtg) >= 0);
@@ -519,7 +523,7 @@ function renderHome() {
   const days = {}; week.forEach(m => (days[m.nextMtg] = days[m.nextMtg] || []).push(m));
   $("v-home").innerHTML = pbar("ホーム") + `
   <div class="hstats">
-    ${stat("在籍会員", active.length, "人", act.length - active.length ? `休会 ${act.length - active.length}人` : "　", "go('members')")}
+    ${stat("在籍会員", active.length, "人", [leaving.length ? `<span style="color:#a8661c">退会予定 ${leaving.length}人</span>` : "", act.length - active.length - leaving.length ? `休会 ${act.length - active.length - leaving.length}人` : ""].filter(Boolean).join("・") || "　", "go('members')")}
     ${stat("今週のミーティング", week.length, "件", overdue.length ? `<span class="red">予定日を過ぎた ${overdue.length}件</span>` : later ? `それ以降の予定 ${later}件` : "　", "document.getElementById('hSched').scrollIntoView({behavior:'smooth'})")}
     ${stat("未対応のケア事項", cares.length, "件", "　", "document.getElementById('hCare').scrollIntoView({behavior:'smooth'})", cares.length ? "red" : "")}
     ${stat(`${Number(k.slice(5))}月の月額 未払い`, unpaid.length, "人", "支払い画面へ →", "go('pay')", unpaid.length ? "red" : "")}
@@ -531,6 +535,11 @@ function renderHome() {
         ${overdue.length ? `<div class="dayh red">予定日を過ぎています（記録を追加するか、次回MTGを入れ直してください）</div>${overdue.map(mtgRow).join("")}` : ""}
         ${Object.keys(days).length ? Object.entries(days).map(([d, ms]) => `<div class="dayh">${daysFrom(d) <= 1 ? dayHead(d) + `<span class="meta">　${fmtDY(d)}</span>` : fmtDY(d)}</div>${ms.map(mtgRow).join("")}`).join("") : (overdue.length ? "" : `<div class="empty">今週の予定はありません${later ? `（それ以降の予定 ${later}件）` : ""}</div>`)}
       </div>
+      ${leaving.length ? `<div class="card"><h3>退会予定<span class="cnt">${leaving.length}</span><span class="meta" style="font-weight:400;margin-left:8px">予定日が近い順</span></h3>
+        ${leaving.map(m => { const n = m.leftDate ? daysFrom(m.leftDate) : null, done = leaveDone(m), all = Object.keys(LEAVE_CHECKS).length;
+          return `<div class="row"><div class="grow">${nm(m)}<div class="meta">退会予定日：${m.leftDate ? fmtDY(m.leftDate) : "未定"}${m.leaveReason ? "　" + esc(m.leaveReason) : ""}</div></div>
+          ${n !== null && n < 0 ? `<span class="tag t-red">予定日を過ぎています</span>` : ""}<span class="tag ${done === all ? "t-green" : "t-orange"}">手続き ${done}/${all}</span></div>`; }).join("")}
+      </div>` : ""}
     </div>
     <div>
       <div class="card" id="hCare"><h3>未対応のケア事項<span class="cnt">${cares.length}</span></h3>
@@ -562,7 +571,7 @@ function renderMembers() {
   </div>
   <div class="toolbar">
     <div class="chips">${chip("course", "all", "すべてのコース")}${chip("course", "store", "店舗")}${chip("course", "online", "電脳")}${chip("course", "both", "両方")}${chip("course", "none", "未設定")}</div>
-    <div class="chips" style="margin-left:auto">${chip("status", "active", "在籍")}${chip("status", "paused", "休会")}${chip("status", "left", "退会")}${chip("status", "all", "すべて")}</div>
+    <div class="chips" style="margin-left:auto">${chip("status", "active", "在籍")}${chip("status", "leaving", "退会予定")}${chip("status", "paused", "休会")}${chip("status", "left", "退会")}${chip("status", "all", "すべて")}</div>
   </div>
   <div id="memTable"></div>`;
   renderMembersTable(list);
@@ -589,7 +598,7 @@ function renderMembersTable(list) {
       const c = openCare(m.id).length;
       const pay = !monthApplies(m, k) ? `<span class="tag t-gray">対象外</span>` : isPaid(m.id, k) ? `<span class="tag t-green">済</span>` : `<span class="tag t-red">未</span>`;
       return `<tr class="click ${m.status === "left" ? "left" : ""}" onclick="go('detail','${m.id}')">
-        <td class="meta">${esc(m.salonNo || "")}</td><td><b>${esc(m.name)}</b>${m.status && m.status !== "active" ? ` <span class="tag t-gray">${STATUS[m.status]}</span>` : ""}</td>
+        <td class="meta">${esc(m.salonNo || "")}</td><td><b>${esc(m.name)}</b>${stTag(m.status)}</td>
         <td>${esc(m.nick || "")}</td><td>${courseTag(m.course)}</td>
         <td>${nextLabel(m)}</td><td class="hide-sp">${lastLabel(m.id)}</td>
         <td>${pay}</td><td>${c ? `<span class="tag t-red">${c}件</span>` : ""}</td></tr>`;
@@ -608,7 +617,7 @@ function renderDetail() {
   $("v-detail").innerHTML = pbar("会員詳細", "", `<button class="back" onclick="go('members')">← 会員一覧へ</button>`) + `
   <div class="card">
     <div class="dhead">
-      <div><div class="big">${esc(m.name)} ${m.status && m.status !== "active" ? `<span class="tag t-gray">${STATUS[m.status]}</span>` : ""}</div>
+      <div><div class="big">${esc(m.name)}${stTag(m.status)}</div>
       <div class="nick">${m.nick ? "あだ名：" + esc(m.nick) : ""}</div></div>
       <div style="margin-left:auto;display:flex;gap:8px"><button class="btn" onclick="openMember('${id}')">編集</button><button class="btn gold" onclick="openMeeting('${id}')">＋ ミーティング記録</button></div>
     </div>
@@ -630,6 +639,17 @@ function renderDetail() {
       return `<div class="m"><button class="pc ${na ? "na" : p ? "paid" : "unpaid"}" ${na ? "disabled" : `onclick="togglePay('${id}','${k}')"`}>${na ? "−" : p ? "済" : "未"}</button><div>${Number(k.slice(5))}月</div></div>`;
     }).join("")}</div>
   </div>
+  ${["leaving", "left"].includes(m.status) ? `<div class="card" style="border-color:#f0d9b5">
+    <div class="dhead"><h3 style="margin:0">退会手続き <span class="tag t-orange">${leaveDone(m)} / ${Object.keys(LEAVE_CHECKS).length} 完了</span></h3>
+      ${m.status === "leaving" ? `<button class="btn sm" style="margin-left:auto" onclick="finishLeave('${id}')">退会にする</button>` : ""}</div>
+    <dl class="kv">
+      <dt>${m.status === "leaving" ? "退会予定日" : "退会日"}</dt><dd>${m.leftDate ? fmtDY(m.leftDate) : `<span class="tag t-orange">未定</span>`}${m.status === "leaving" && m.leftDate && daysFrom(m.leftDate) < 0 ? ` <span class="tag t-red">予定日を過ぎています</span>` : ""}</dd>
+      ${m.leaveReason ? `<dt>理由</dt><dd>${esc(m.leaveReason)}</dd>` : ""}
+      ${m.leaveLog ? `<dt>やり取りの記録</dt><dd style="white-space:pre-wrap">${esc(m.leaveLog)}</dd>` : ""}
+    </dl>
+    <div style="display:flex;flex-direction:column;gap:6px;margin-top:10px">${Object.entries(LEAVE_CHECKS).map(([k, v]) => `<label class="chk" style="color:inherit;font-size:14px;margin:0"><input type="checkbox" ${m.leaveChecks?.[k] ? "checked" : ""} onchange="toggleLeave('${id}','${k}',this.checked)">${v}${k === "gain" ? `<span class="meta">　（聞き取り：${CHECK[m.gainCheck || "unchecked"]}）</span>` : ""}</label>`).join("")}</div>
+    <div class="hint" style="margin-top:8px">退会予定日・理由・やり取りの記録は「編集」から入力できます。</div>
+  </div>` : ""}
   ${(() => { const al = arrOf(id); return `<div class="card">
     <div class="dhead"><h3 style="margin:0">GAIN未入金 <span class="tag ${m.gainCheck === "has" ? "t-red" : m.gainCheck === "none" ? "t-green" : "t-gray"}">聞き取り：${CHECK[m.gainCheck || "unchecked"]}</span></h3>
       <div style="margin-left:auto;display:flex;gap:6px;flex-wrap:wrap">${Object.entries(CHECK).map(([k, v]) => `<button class="btn sm ${(m.gainCheck || "unchecked") === k ? "pri" : ""}" onclick="setCheck('${id}','${k}')">${v}</button>`).join("")}<button class="btn sm gold" onclick="openArrear('${id}')">＋ 追加</button></div></div>
@@ -794,6 +814,18 @@ function exportArrCSV() {
   a.download = `GILD_GAIN未入金_${todayStr()}.csv`; a.click();
 }
 
+async function toggleLeave(id, k, v) {
+  const m = state.members[id]; m.leaveChecks = { ...(m.leaveChecks || {}), [k]: v };
+  render(); await save("PATCH", `members/${id}/leaveChecks`, { [k]: v });
+}
+function finishLeave(id) {
+  const m = state.members[id], rest = Object.keys(LEAVE_CHECKS).length - leaveDone(m);
+  confirmBox(`${m.name}さんを「退会」にしますか？${rest ? `（退会手続きのチェックがまだ${rest}つ残っています）` : ""}`, async () => {
+    const patch = { status: "left", leftDate: m.leftDate || todayStr(), nextMtg: "", nextMtgTime: "" };
+    Object.assign(m, patch); render(); toast("退会にしました"); await save("PATCH", `members/${id}`, patch);
+  });
+}
+
 /* ---------- 操作 ---------- */
 async function togglePay(id, k) {
   const v = !isPaid(id, k);
@@ -837,7 +869,11 @@ function openMember(id) {
     <div class="f"><label>コース</label><select id="fCourse">${Object.entries(COURSES).map(([k, v]) => `<option value="${k}" ${m.course === k ? "selected" : ""}>${v}</option>`).join("")}</select></div></div>
     <div class="f2"><div class="f"><label>入会日</label><input id="fJoin" type="date" value="${esc(m.joinDate)}"></div>
     <div class="f"><label>状態</label><select id="fStatus">${Object.entries(STATUS).map(([k, v]) => `<option value="${k}" ${(m.status || "active") === k ? "selected" : ""}>${v}</option>`).join("")}</select></div></div>
-    <div class="f" id="leftWrap"><label>退会日（この月まで支払い対象）</label><input id="fLeft" type="date" value="${esc(m.leftDate)}"></div>
+    <div id="leftWrap">
+      <div class="f"><label id="fLeftLbl">退会日（この月まで支払い対象）</label><input id="fLeft" type="date" value="${esc(m.leftDate)}"></div>
+      <div class="f"><label>退会の理由</label><input id="fLeaveReason" value="${esc(m.leaveReason)}" placeholder="例：HAYATO退会に伴い"></div>
+      <div class="f"><label>やり取りの記録（日付と事実だけを書くのがおすすめ）</label><textarea id="fLeaveLog" style="min-height:70px" placeholder="例：11/10 全体ミーティングで退会の意向を伝えられた">${esc(m.leaveLog)}</textarea></div>
+    </div>
     <div class="f2"><div class="f"><label>入会金（円）</label><input id="fEntry" type="number" inputmode="numeric" value="${esc(m.entryFee)}"></div>
     <div class="f"><label>月額（円）</label><input id="fFee" type="number" inputmode="numeric" value="${esc(m.fee)}"></div></div>
     <div class="f chk"><input type="checkbox" id="fEntryPaid" ${m.entryPaid ? "checked" : ""}><label for="fEntryPaid" style="margin:0;color:inherit;font-size:14px">入会金は支払い済み</label></div>
@@ -848,7 +884,7 @@ function openMember(id) {
     <div class="f"><label>LINE名など</label><input id="fContact" value="${esc(m.contact)}"></div>
     <div class="f"><label>メモ（会員の背景・目標など）</label><textarea id="fMemo">${esc(m.memo)}</textarea></div>
     <div class="mact">${id ? `<button class="btn danger" style="margin-right:auto" onclick="delMember('${id}')">削除</button>` : ""}<button class="btn" onclick="closeModal()">キャンセル</button><button class="btn pri" onclick="saveMember(${id ? `'${id}'` : ""})">保存</button></div>`);
-  const sync = () => $("leftWrap").classList.toggle("hidden", $("fStatus").value !== "left");
+  const sync = () => { const v = $("fStatus").value; $("leftWrap").classList.toggle("hidden", v !== "left" && v !== "leaving"); $("fLeftLbl").textContent = v === "leaving" ? "退会予定日（この月まで支払い対象）" : "退会日（この月まで支払い対象）"; };
   $("fStatus").onchange = sync; sync();
 }
 async function saveMember(id) {
@@ -858,7 +894,8 @@ async function saveMember(id) {
   const data = {
     salonNo: $("fNo").value.trim(), email: $("fEmail").value.trim(), phone: $("fPhone").value.trim(),
     name, kana: $("fKana").value.trim(), nick: $("fNick").value.trim(), course: $("fCourse").value,
-    joinDate: $("fJoin").value, status: $("fStatus").value, leftDate: $("fStatus").value === "left" ? $("fLeft").value : "",
+    joinDate: $("fJoin").value, status: $("fStatus").value, leftDate: ["left", "leaving"].includes($("fStatus").value) ? $("fLeft").value : "",
+    leaveReason: $("fLeaveReason").value.trim(), leaveLog: $("fLeaveLog").value.trim(),
     entryFee: num($("fEntry").value), fee: num($("fFee").value), entryPaid: $("fEntryPaid").checked,
     nextMtg: $("fNext").value, nextMtgTime: $("fNext").value ? $("fNextTime").value : "", contact: $("fContact").value.trim(), memo: $("fMemo").value.trim(), updatedAt: Date.now()
   };
@@ -986,7 +1023,7 @@ function normCourse(v) {
   if ((st && on) || v === "両方") return "both";
   if (st) return "store"; if (on) return "online"; return "none";
 }
-function normStatus(v) { v = (v || "").trim(); return /退会/.test(v) ? "left" : /停止|休会/.test(v) ? "paused" : "active"; }
+function normStatus(v) { v = (v || "").trim(); return /退会予定/.test(v) ? "leaving" : /退会/.test(v) ? "left" : /停止|休会/.test(v) ? "paused" : "active"; }
 function normDate(v) {
   const m = String(v || "").trim().match(/^(\d{4})[\/\-.年](\d{1,2})[\/\-.月](\d{1,2})/);
   return m ? `${m[1]}-${m[2].padStart(2, "0")}-${m[3].padStart(2, "0")}` : "";
