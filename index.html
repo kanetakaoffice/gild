@@ -206,7 +206,7 @@ const CONFIG = {
 };
 
 const DEMO = !CONFIG.apiKey || !CONFIG.databaseURL;
-const COURSES = { store: "店舗", online: "電脳", both: "店舗・電脳" };
+const COURSES = { none: "未設定", store: "店舗", online: "電脳", both: "店舗・電脳" };
 const STATUS = { active: "在籍", paused: "休会", left: "退会" };
 
 let state = { members: {}, meetings: {}, payments: {}, arrears: {} };
@@ -242,7 +242,7 @@ function fmtD(s) { if (!s) return "—"; const d = new Date(s + "T00:00:00"); re
 function fmtDY(s) { if (!s) return "—"; const d = new Date(s + "T00:00:00"); return `${d.getFullYear()}/${d.getMonth() + 1}/${d.getDate()}(${WD[d.getDay()]})`; }
 function daysFrom(s) { return Math.round((new Date(s + "T00:00:00") - new Date(todayStr() + "T00:00:00")) / 86400000); }
 function toast(msg) { const t = $("toast"); t.textContent = msg; t.classList.add("show"); clearTimeout(t._t); t._t = setTimeout(() => t.classList.remove("show"), 1800); }
-function courseTag(c) { return `<span class="tag t-${c || "gray"}">${esc(COURSES[c] || "未設定")}</span>`; }
+function courseTag(c) { return `<span class="tag t-${c && c !== "none" ? c : "gray"}">${esc(COURSES[c] || "未設定")}</span>`; }
 function yen(n) { return n || n === 0 ? Number(n).toLocaleString() + "円" : "—"; }
 
 /* ---------- 認証（Firebase REST） ---------- */
@@ -373,21 +373,21 @@ function renderHome() {
 function renderMembers() {
   let list = membersArr();
   if (ui.status !== "all") list = list.filter(m => (m.status || "active") === ui.status);
-  if (ui.course !== "all") list = list.filter(m => m.course === ui.course || (ui.course !== "both" && m.course === "both"));
+  if (ui.course !== "all") list = list.filter(m => m.course === ui.course || (ui.course !== "both" && ui.course !== "none" && m.course === "both"));
   const q = ui.search.trim().toLowerCase();
-  if (q) list = list.filter(m => [m.name, m.nick, m.kana, m.memo].some(v => (v || "").toLowerCase().includes(q)));
+  if (q) list = list.filter(m => [m.name, m.nick, m.kana, m.memo, m.salonNo, m.email, m.phone].some(v => String(v || "").toLowerCase().includes(q)));
   list.sort((a, b) => (a.kana || a.name || "").localeCompare(b.kana || b.name || "", "ja"));
   const k = curYM();
   const chip = (key, val, label) => `<button class="chip ${ui[key] === val ? "on" : ""}" onclick="ui.${key}='${val}';renderMembers()">${label}</button>`;
   $("v-members").innerHTML = `
   <div class="toolbar">
-    <input type="search" placeholder="名前・あだ名で検索" value="${esc(ui.search)}" oninput="ui.search=this.value;renderMembersTable()">
+    <input type="search" placeholder="名前・あだ名・サロンNo・メールで検索" value="${esc(ui.search)}" oninput="ui.search=this.value;renderMembersTable()">
     <button class="btn gold" onclick="openMember()">＋ 会員を追加</button>
     <button class="btn" onclick="openBulk()">まとめて登録</button>
     <button class="btn hide-sp" onclick="exportCSV()">CSVで書き出し</button>
   </div>
   <div class="toolbar">
-    <div class="chips">${chip("course", "all", "すべてのコース")}${chip("course", "store", "店舗")}${chip("course", "online", "電脳")}${chip("course", "both", "両方")}</div>
+    <div class="chips">${chip("course", "all", "すべてのコース")}${chip("course", "store", "店舗")}${chip("course", "online", "電脳")}${chip("course", "both", "両方")}${chip("course", "none", "未設定")}</div>
     <div class="chips" style="margin-left:auto">${chip("status", "active", "在籍")}${chip("status", "paused", "休会")}${chip("status", "left", "退会")}${chip("status", "all", "すべて")}</div>
   </div>
   <div id="memTable"></div>`;
@@ -397,21 +397,21 @@ function renderMembersTable(list) {
   if (!list) { // 検索入力時：フォーカスを保ったまま表だけ更新
     let l = membersArr();
     if (ui.status !== "all") l = l.filter(m => (m.status || "active") === ui.status);
-    if (ui.course !== "all") l = l.filter(m => m.course === ui.course || (ui.course !== "both" && m.course === "both"));
+    if (ui.course !== "all") l = l.filter(m => m.course === ui.course || (ui.course !== "both" && ui.course !== "none" && m.course === "both"));
     const q = ui.search.trim().toLowerCase();
-    if (q) l = l.filter(m => [m.name, m.nick, m.kana, m.memo].some(v => (v || "").toLowerCase().includes(q)));
+    if (q) l = l.filter(m => [m.name, m.nick, m.kana, m.memo, m.salonNo, m.email, m.phone].some(v => String(v || "").toLowerCase().includes(q)));
     l.sort((a, b) => (a.kana || a.name || "").localeCompare(b.kana || b.name || "", "ja"));
     list = l;
   }
   const k = curYM();
   $("memTable").innerHTML = list.length ? `
   <div class="scroll"><table class="tbl">
-    <tr><th>氏名</th><th>あだ名</th><th>コース</th><th>次回MTG</th><th class="hide-sp">前回MTG</th><th>今月</th><th>ケア</th></tr>
+    <tr><th>No</th><th>氏名</th><th>あだ名</th><th>コース</th><th>次回MTG</th><th class="hide-sp">前回MTG</th><th>今月</th><th>ケア</th></tr>
     ${list.map(m => {
       const c = openCare(m.id).length;
       const pay = !monthApplies(m, k) ? `<span class="tag t-gray">対象外</span>` : isPaid(m.id, k) ? `<span class="tag t-green">済</span>` : `<span class="tag t-red">未</span>`;
       return `<tr class="click ${m.status === "left" ? "left" : ""}" onclick="go('detail','${m.id}')">
-        <td><b>${esc(m.name)}</b>${m.status && m.status !== "active" ? ` <span class="tag t-gray">${STATUS[m.status]}</span>` : ""}</td>
+        <td class="meta">${esc(m.salonNo || "")}</td><td><b>${esc(m.name)}</b>${m.status && m.status !== "active" ? ` <span class="tag t-gray">${STATUS[m.status]}</span>` : ""}</td>
         <td>${esc(m.nick || "")}</td><td>${courseTag(m.course)}</td>
         <td>${fmtD(m.nextMtg)}</td><td class="hide-sp">${fmtD(lastMtg(m.id))}</td>
         <td>${pay}</td><td>${c ? `<span class="tag t-red">${c}件</span>` : ""}</td></tr>`;
@@ -436,12 +436,15 @@ function renderDetail() {
       <div style="margin-left:auto;display:flex;gap:8px"><button class="btn" onclick="openMember('${id}')">編集</button><button class="btn gold" onclick="openMeeting('${id}')">＋ ミーティング記録</button></div>
     </div>
     <dl class="kv">
+      ${m.salonNo ? `<dt>サロンNo</dt><dd>${esc(m.salonNo)}</dd>` : ""}
       <dt>コース</dt><dd>${courseTag(m.course)}</dd>
       <dt>入会日</dt><dd>${fmtDY(m.joinDate)}</dd>
       <dt>入会金</dt><dd>${yen(m.entryFee)}　${m.entryPaid ? `<span class="tag t-green">支払い済み</span>` : `<span class="tag t-red">未払い</span>`} <button class="btn sm" onclick="toggleEntry('${id}')">${m.entryPaid ? "未払いに戻す" : "支払い済みにする"}</button></dd>
       <dt>月額</dt><dd>${yen(m.fee)}</dd>
       <dt>次回MTG</dt><dd><b>${fmtDY(m.nextMtg)}</b></dd>
-      ${m.contact ? `<dt>連絡先</dt><dd>${esc(m.contact)}</dd>` : ""}
+      ${m.email ? `<dt>メール</dt><dd><a href="mailto:${esc(m.email)}">${esc(m.email)}</a></dd>` : ""}
+      ${m.phone ? `<dt>電話番号</dt><dd><a href="tel:${esc(m.phone)}">${esc(m.phone)}</a></dd>` : ""}
+      ${m.contact ? `<dt>LINE名など</dt><dd>${esc(m.contact)}</dd>` : ""}
       ${m.memo ? `<dt>メモ</dt><dd style="white-space:pre-wrap">${esc(m.memo)}</dd>` : ""}
     </dl>
     <div class="lbl hint" style="margin-top:12px">月額の支払い（直近6か月・タップで切り替え）</div>
@@ -642,8 +645,9 @@ function confirmBox(msg, ok) {
 }
 
 function openMember(id) {
-  const m = id ? state.members[id] : { course: "store", status: "active", joinDate: todayStr() };
+  const m = id ? state.members[id] : { course: "none", status: "active", joinDate: todayStr() };
   modal(`<h3>${id ? "会員情報の編集" : "会員を追加"}</h3>
+    <div class="f2"><div class="f"><label>サロンナンバー</label><input id="fNo" value="${esc(m.salonNo)}"></div><div></div></div>
     <div class="f2"><div class="f"><label>氏名 *</label><input id="fName" value="${esc(m.name)}"></div>
     <div class="f"><label>ふりがな（並び替え用）</label><input id="fKana" value="${esc(m.kana)}"></div></div>
     <div class="f2"><div class="f"><label>サロン内のあだ名</label><input id="fNick" value="${esc(m.nick)}"></div>
@@ -655,7 +659,9 @@ function openMember(id) {
     <div class="f"><label>月額（円）</label><input id="fFee" type="number" inputmode="numeric" value="${esc(m.fee)}"></div></div>
     <div class="f chk"><input type="checkbox" id="fEntryPaid" ${m.entryPaid ? "checked" : ""}><label for="fEntryPaid" style="margin:0;color:inherit;font-size:14px">入会金は支払い済み</label></div>
     <div class="f"><label>次回ミーティング日</label><input id="fNext" type="date" value="${esc(m.nextMtg)}"></div>
-    <div class="f"><label>連絡先（LINE名など）</label><input id="fContact" value="${esc(m.contact)}"></div>
+    <div class="f2"><div class="f"><label>メールアドレス</label><input id="fEmail" type="email" value="${esc(m.email)}"></div>
+    <div class="f"><label>電話番号</label><input id="fPhone" type="tel" value="${esc(m.phone)}"></div></div>
+    <div class="f"><label>LINE名など</label><input id="fContact" value="${esc(m.contact)}"></div>
     <div class="f"><label>メモ（会員の背景・目標など）</label><textarea id="fMemo">${esc(m.memo)}</textarea></div>
     <div class="mact">${id ? `<button class="btn danger" style="margin-right:auto" onclick="delMember('${id}')">削除</button>` : ""}<button class="btn" onclick="closeModal()">キャンセル</button><button class="btn pri" onclick="saveMember(${id ? `'${id}'` : ""})">保存</button></div>`);
   const sync = () => $("leftWrap").classList.toggle("hidden", $("fStatus").value !== "left");
@@ -666,6 +672,7 @@ async function saveMember(id) {
   if (!name) { alert("氏名を入力してください"); return; }
   const num = v => v === "" ? null : Number(v);
   const data = {
+    salonNo: $("fNo").value.trim(), email: $("fEmail").value.trim(), phone: $("fPhone").value.trim(),
     name, kana: $("fKana").value.trim(), nick: $("fNick").value.trim(), course: $("fCourse").value,
     joinDate: $("fJoin").value, status: $("fStatus").value, leftDate: $("fStatus").value === "left" ? $("fLeft").value : "",
     entryFee: num($("fEntry").value), fee: num($("fFee").value), entryPaid: $("fEntryPaid").checked,
@@ -721,28 +728,57 @@ async function saveMeeting(memberId, mid) {
 /* ---------- まとめて登録・書き出し ---------- */
 function openBulk() {
   modal(`<h3>会員をまとめて登録</h3>
-    <p class="hint">1行に1人ずつ、<b>氏名,あだ名,コース,入会日,月額</b> の順でカンマ区切りで入力します（あだ名以降は省略可）。<br>コースは「店舗」「電脳」「両方」のいずれか。入会日は 2026-04-01 の形式。スプレッドシートからのコピー（タブ区切り）でもOKです。</p>
-    <div class="f"><textarea id="bulkTxt" style="min-height:200px" placeholder="山田太郎,たろう,店舗,2026-04-01,10000&#10;佐藤花子,はなちゃん,両方"></textarea></div>
+    <p class="hint">1行目に見出し、2行目から1行に1人ずつ、タブ区切り（スプレッドシートからのコピー）かカンマ区切りで貼り付けます。<br>
+    使える見出し：<b>サロンNo・氏名・ふりがな・あだ名・コース・状態・メール・電話・入会日・月額</b>（順番は自由、氏名以外は省略可）<br>
+    コースは「店舗のみ／電脳のみ／店舗+電脳／未設定」、状態は「通常／一時停止／退会」。<br>同じサロンNoの会員がすでにいる場合は登録しません（二重登録の防止）。</p>
+    <div class="f"><textarea id="bulkTxt" style="min-height:220px" placeholder="サロンNo&#9;氏名&#9;ふりがな&#9;あだ名&#9;コース&#9;状態&#9;メール&#9;電話&#9;入会日&#10;0049&#9;山田 太郎&#9;やまだ たろう&#9;たろう&#9;未設定&#9;通常&#9;xxx@example.com&#9;09000000000&#9;2026/10/19"></textarea></div>
     <div class="mact"><button class="btn" onclick="closeModal()">キャンセル</button><button class="btn pri" onclick="doBulk()">登録</button></div>`);
 }
+function normCourse(v) {
+  v = (v || "").replace(/\s/g, "");
+  if (!v || v === "未設定") return "none";
+  const st = /店舗/.test(v), on = /電脳/.test(v);
+  if ((st && on) || v === "両方") return "both";
+  if (st) return "store"; if (on) return "online"; return "none";
+}
+function normStatus(v) { v = (v || "").trim(); return /退会/.test(v) ? "left" : /停止|休会/.test(v) ? "paused" : "active"; }
+function normDate(v) {
+  const m = String(v || "").trim().match(/^(\d{4})[\/\-.年](\d{1,2})[\/\-.月](\d{1,2})/);
+  return m ? `${m[1]}-${m[2].padStart(2, "0")}-${m[3].padStart(2, "0")}` : "";
+}
 async function doBulk() {
-  const cmap = { "店舗": "store", "電脳": "online", "両方": "both", "店舗・電脳": "both" };
-  const lines = $("bulkTxt").value.split(/\r?\n/).map(l => l.trim()).filter(Boolean);
-  const add = {};
-  for (const l of lines) {
-    const [name, nick, course, joinDate, fee] = l.split(/\t|,/).map(s => (s || "").trim());
-    if (!name) continue;
-    add[uid()] = { name, nick: nick || "", course: cmap[course] || "store", joinDate: /^\d{4}-\d{2}-\d{2}$/.test(joinDate || "") ? joinDate : "", fee: fee ? Number(fee.replace(/[^\d]/g, "")) || null : null, status: "active", entryPaid: false, createdAt: Date.now() };
+  const lines = $("bulkTxt").value.split(/\r?\n/).filter(l => l.trim());
+  if (!lines.length) { alert("登録できる行がありません"); return; }
+  const split = l => (l.includes("\t") ? l.split("\t") : l.split(",")).map(x => x.trim());
+  const alias = { salonNo: /サロン\s*(No|ナンバー|番号)|^No$/i, name: /^氏名$|^名前$/, kana: /ふりがな|フリガナ|かな/, nick: /あだ名|サロン名|ニックネーム/,
+    course: /コース|プラン/, status: /状態/, email: /メール/, phone: /電話/, joinDate: /入会日|登録日/, fee: /月額/ };
+  let cols = null, start = 0;
+  const head = split(lines[0]);
+  if (head.some(h => /氏名|名前/.test(h))) {
+    cols = {}; head.forEach((h, i) => { for (const [k, re] of Object.entries(alias)) if (cols[k] === undefined && re.test(h)) { cols[k] = i; break; } });
+    start = 1;
+  } else cols = { name: 0, nick: 1, course: 2, joinDate: 3, fee: 4 }; // 見出しなし（旧形式）
+  const exist = new Set(membersArr().map(m => m.salonNo).filter(Boolean));
+  const add = {}; let skip = 0;
+  for (const l of lines.slice(start)) {
+    const c = split(l), g = k => cols[k] === undefined ? "" : (c[cols[k]] || "").trim();
+    const name = g("name"); if (!name) continue;
+    const no = g("salonNo");
+    if (no && exist.has(no)) { skip++; continue; }
+    if (no) exist.add(no);
+    const fee = g("fee").replace(/[^\d]/g, "");
+    add[uid()] = { salonNo: no, name, kana: g("kana"), nick: g("nick"), course: normCourse(g("course")), status: normStatus(g("status")),
+      email: g("email"), phone: g("phone"), joinDate: normDate(g("joinDate")), fee: fee ? Number(fee) : null, entryPaid: false, createdAt: Date.now() };
   }
   const n = Object.keys(add).length;
-  if (!n) { alert("登録できる行がありません"); return; }
-  Object.assign(state.members, add); closeModal(); render(); toast(`${n}人を登録しました`);
+  if (!n) { alert(skip ? `すべて登録済みのサロンNoでした（${skip}件）` : "登録できる行がありません"); return; }
+  Object.assign(state.members, add); closeModal(); render(); toast(`${n}人を登録しました${skip ? `（登録済み${skip}件はスキップ）` : ""}`);
   await save("PATCH", "members", add);
 }
 function exportCSV() {
   const k = curYM();
-  const head = ["氏名", "ふりがな", "あだ名", "コース", "状態", "入会日", "入会金", "入会金支払い", "月額", `${k}支払い`, "次回MTG", "前回MTG", "未対応ケア数", "連絡先", "メモ"];
-  const rows = membersArr().map(m => [m.name, m.kana, m.nick, COURSES[m.course], STATUS[m.status || "active"], m.joinDate, m.entryFee, m.entryPaid ? "済" : "未", m.fee, isPaid(m.id, k) ? "済" : "未", m.nextMtg, lastMtg(m.id), openCare(m.id).length, m.contact, m.memo]);
+  const head = ["サロンNo", "氏名", "ふりがな", "あだ名", "コース", "状態", "入会日", "入会金", "入会金支払い", "月額", `${k}支払い`, "次回MTG", "前回MTG", "未対応ケア数", "メール", "電話番号", "LINE名など", "メモ"];
+  const rows = membersArr().map(m => [m.salonNo, m.name, m.kana, m.nick, COURSES[m.course], STATUS[m.status || "active"], m.joinDate, m.entryFee, m.entryPaid ? "済" : "未", m.fee, isPaid(m.id, k) ? "済" : "未", m.nextMtg, lastMtg(m.id), openCare(m.id).length, m.email, m.phone, m.contact, m.memo]);
   const csv = [head, ...rows].map(r => r.map(v => `"${String(v ?? "").replace(/"/g, '""')}"`).join(",")).join("\r\n");
   const a = document.createElement("a");
   a.href = URL.createObjectURL(new Blob(["﻿" + csv], { type: "text/csv" }));
