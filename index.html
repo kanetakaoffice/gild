@@ -165,6 +165,17 @@ h3{font-size:15px;margin:0 0 8px}
 @media (max-width:1200px){.hstats{grid-template-columns:repeat(3,1fr)}}
 @media (max-width:900px){.hgrid{grid-template-columns:1fr}}
 @media (max-width:560px){.hstats{grid-template-columns:repeat(2,1fr)}}
+/* GAIN未入金：会員ごとに開閉 */
+.card.arr{padding:0;overflow:hidden}
+.arrhead{display:flex;align-items:center;gap:12px;padding:14px 16px;cursor:pointer;user-select:none}
+.arrhead:hover{background:#fbf8f1}
+.arrhead .grow{flex:1;min-width:0}
+.arrhead .chev{color:var(--sub);font-size:11px;transition:transform .15s;width:12px}
+.card.arr.open .chev{transform:rotate(90deg)}
+.arrbody{display:none;padding:0 16px 14px;border-top:1px solid var(--line)}
+.card.arr.open .arrbody{display:block}
+.card.arr{margin-bottom:8px}
+@media print{.arrbody{display:block!important}.chev{display:none}}
 /* ページ見出しバー */
 .pbar{display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin:0 0 16px}
 .pbar h1{font-size:19px;margin:0;font-weight:700;letter-spacing:.03em}
@@ -289,6 +300,8 @@ const LOG_TYPES = { contact: "連絡", consult: "相談", warning: "注意", vio
 const LOG_ACTIONS = ["口頭で注意", "書面で警告", "退会をお願いした", "その他"];
 const CONTRACT = { none: "未送付", sent: "送付済み", signed: "締結済み" };
 const logsOf = id => Object.entries(state.logs || {}).filter(([, x]) => x.memberId === id).map(([lid, x]) => ({ id: lid, ...x })).sort((a, b) => (b.date || "").localeCompare(a.date || ""));
+const refName = m => m.referrerId && state.members[m.referrerId] ? state.members[m.referrerId].name + (state.members[m.referrerId].nick ? "（" + state.members[m.referrerId].nick + "）" : "") : (m.referrer || "");
+const referredBy = id => membersArr().filter(x => x.referrerId === id).sort(byNo);
 const warnCount = id => logsOf(id).filter(x => x.type === "warning" || x.type === "violation").length;
 const LEAVE_CHECKS = { date: "退会日を確定した", pay: "月額などの支払いを精算した", gild: "gild.lifeのアカウントを停止した", line: "グループLINEの退出を確認した", gain: "GAIN未入金の聞き取りが済んでいる" };
 const leaveDone = m => Object.keys(LEAVE_CHECKS).filter(k => m.leaveChecks?.[k]).length;
@@ -568,7 +581,7 @@ function renderMembers() {
   if (ui.contract && ui.contract !== "all") list = list.filter(m => (m.contractStatus || "none") === ui.contract);
   if (ui.course !== "all") list = list.filter(m => m.course === ui.course || (ui.course !== "both" && ui.course !== "none" && m.course === "both"));
   const q = ui.search.trim().toLowerCase();
-  if (q) list = list.filter(m => [m.name, m.nick, m.kana, m.memo, m.salonNo, m.email, m.phone, m.referrer].some(v => String(v || "").toLowerCase().includes(q)));
+  if (q) list = list.filter(m => [m.name, m.nick, m.kana, m.memo, m.salonNo, m.email, m.phone, refName(m)].some(v => String(v || "").toLowerCase().includes(q)));
   list.sort(memSort);
   const k = curYM();
   const chip = (key, val, label) => `<button class="chip ${ui[key] === val ? "on" : ""}" onclick="ui.${key}='${val}';renderMembers()">${label}</button>`;
@@ -595,7 +608,7 @@ function renderMembersTable(list) {
     if (ui.contract && ui.contract !== "all") l = l.filter(m => (m.contractStatus || "none") === ui.contract);
   if (ui.course !== "all") l = l.filter(m => m.course === ui.course || (ui.course !== "both" && ui.course !== "none" && m.course === "both"));
     const q = ui.search.trim().toLowerCase();
-    if (q) l = l.filter(m => [m.name, m.nick, m.kana, m.memo, m.salonNo, m.email, m.phone, m.referrer].some(v => String(v || "").toLowerCase().includes(q)));
+    if (q) l = l.filter(m => [m.name, m.nick, m.kana, m.memo, m.salonNo, m.email, m.phone, refName(m)].some(v => String(v || "").toLowerCase().includes(q)));
     l.sort(memSort);
     list = l;
   }
@@ -640,7 +653,9 @@ function renderDetail() {
       ${m.email ? `<dt>メール</dt><dd><a href="mailto:${esc(m.email)}">${esc(m.email)}</a></dd>` : ""}
       ${m.phone ? `<dt>電話番号</dt><dd><a href="tel:${esc(m.phone)}">${esc(m.phone)}</a></dd>` : ""}
       ${m.contact ? `<dt>LINE名など</dt><dd>${esc(m.contact)}</dd>` : ""}
-      ${m.referrer ? `<dt>紹介者</dt><dd>${esc(m.referrer)}</dd>` : ""}
+      ${refName(m) ? `<dt>紹介者</dt><dd>${m.referrerId && state.members[m.referrerId] ? `<span class="nm" style="cursor:pointer;text-decoration:underline" onclick="go('detail','${m.referrerId}')">${esc(refName(m))}</span>` : esc(refName(m)) + ' <span class="meta">（会員以外）</span>'}</dd>` : ""}
+      ${(() => { const rb = referredBy(id); if (!rb.length) return ""; const lv = rb.filter(x => x.status === "leaving").length, lf = rb.filter(x => x.status === "left").length;
+        return `<dt>紹介した会員</dt><dd>${rb.length}人${lv || lf ? `<span class="meta">（${[lv ? "退会予定 " + lv + "人" : "", lf ? "退会 " + lf + "人" : ""].filter(Boolean).join("・")}）</span>` : ""}<div style="display:flex;flex-wrap:wrap;gap:4px;margin-top:4px">${rb.map(x => `<span class="tag ${x.status === "left" ? "t-gray" : x.status === "leaving" ? "t-orange" : "t-green"}" style="cursor:pointer" onclick="go('detail','${x.id}')">${x.salonNo ? esc(x.salonNo) + " " : ""}${esc(x.name)}${x.status && x.status !== "active" ? "・" + STATUS[x.status] : ""}</span>`).join("")}</div></dd>`; })()}
       <dt>契約書</dt><dd><span class="tag ${m.contractStatus === "signed" ? "t-green" : m.contractStatus === "sent" ? "t-orange" : "t-gray"}">${CONTRACT[m.contractStatus || "none"]}</span>${m.contractDate ? "　" + fmtDY(m.contractDate) : ""}</dd>
       ${m.goal ? `<dt>目標</dt><dd><b>${esc(m.goal)}</b></dd>` : ""}
       ${m.progress ? `<dt>今の状況</dt><dd style="white-space:pre-wrap">${esc(m.progress)}${m.progressAt ? `<span class="meta">　（${fmtD(m.progressAt)}更新）</span>` : ""}</dd>` : ""}
@@ -764,18 +779,33 @@ function renderArrears() {
   </div>
   <div class="toolbar noprint">
     <div class="chips">${chip("unpaid", "未入金が残っている会員")}${chip("settled", "精算が終わった会員")}${chip("fill", "あとで埋める取引（日付不明・金額未確定）")}${chip("unchecked", "まだ聞き取りしていない会員")}${chip("needev", "証拠を集める必要がある")}${chip("noev", "証拠が存在しない")}</div>
+    <div style="margin-left:auto;display:flex;gap:6px"><button class="btn sm" onclick="arrAll(true)">すべて開く</button><button class="btn sm" onclick="arrAll(false)">すべて閉じる</button></div>
   </div>
   ${list.length ? list.map(r => `
-    <div class="card arr">
-      <div class="dhead"><div><span class="nm" style="font-weight:700;cursor:pointer" onclick="go('detail','${r.m.id}')">${esc(r.m.name)}</span>${r.m.nick ? ` <span class="meta">（${esc(r.m.nick)}）</span>` : ""}
-        <span class="tag ${r.m.gainCheck === "has" ? "t-red" : r.m.gainCheck === "none" ? "t-green" : "t-gray"}">聞き取り：${CHECK[r.m.gainCheck || "unchecked"]}</span></div>
-        <div style="margin-left:auto;text-align:right"><div class="hint">未入金</div><b class="red" style="font-size:17px">${r.unpaid.toLocaleString()}円</b>${r.open ? `<div class="meta">${r.open}件・${r.qty}個${r.unk ? `（ほかに金額未確定${r.unk}件）` : ""}</div>` : ""}${r.settled ? `<div class="meta">精算済み ${r.settled.toLocaleString()}円</div>` : ""}</div></div>
-      ${r.l.length ? `<div style="margin-top:8px">${arrTable(r.l, r.m.id)}</div>` : ""}
+    <div class="card arr ${ui.arrOpen?.[r.m.id] ? "open" : ""}" id="arr-${r.m.id}">
+      <div class="arrhead" onclick="toggleArr('${r.m.id}')">
+        <span class="chev">▶</span>
+        <div class="grow"><span class="meta">${esc(r.m.salonNo || "")}</span> <b>${esc(r.m.name)}</b>${r.m.nick ? ` <span class="meta">（${esc(r.m.nick)}）</span>` : ""}
+          <span class="tag ${r.m.gainCheck === "has" ? "t-red" : r.m.gainCheck === "none" ? "t-green" : "t-gray"}">聞き取り：${CHECK[r.m.gainCheck || "unchecked"]}</span>
+          ${r.l.some(needFill) ? `<span class="tag t-orange">あとで埋める ${r.l.filter(needFill).length}</span>` : ""}</div>
+        <div style="text-align:right;white-space:nowrap"><b class="red" style="font-size:16px">${r.unpaid.toLocaleString()}円</b><div class="meta">${r.open ? `${r.open}件・${r.qty}個${r.unk ? `（金額未確定${r.unk}件）` : ""}` : r.l.length ? "精算済み" : "記録なし"}${r.settled ? `　精算済み ${r.settled.toLocaleString()}円` : ""}</div></div>
+      </div>
+      <div class="arrbody">
+      ${r.l.length ? `<div style="margin-top:10px">${arrTable(r.l, r.m.id)}</div>` : ""}
       <div class="noprint" style="margin-top:8px;display:flex;gap:6px;flex-wrap:wrap">
         <button class="btn sm" onclick="openArrear('${r.m.id}')">＋ この会員に追加</button>
         ${Object.entries(CHECK).map(([k, v]) => `<button class="btn sm ${(r.m.gainCheck || "unchecked") === k ? "pri" : ""}" onclick="setCheck('${r.m.id}','${k}')">${v}</button>`).join("")}
+        <button class="btn sm" style="margin-left:auto" onclick="go('detail','${r.m.id}')">会員ページへ</button>
+      </div>
       </div>
     </div>`).join("") : `<div class="card empty">該当する会員はいません</div>`}`;
+}
+function toggleArr(id) {
+  ui.arrOpen = { ...(ui.arrOpen || {}), [id]: !ui.arrOpen?.[id] };
+  document.getElementById("arr-" + id)?.classList.toggle("open", !!ui.arrOpen[id]);
+}
+function arrAll(v) {
+  ui.arrOpen = {}; document.querySelectorAll(".card.arr").forEach(el => { const id = el.id.slice(4); ui.arrOpen[id] = v; el.classList.toggle("open", v); });
 }
 async function setCheck(id, v) {
   state.members[id].gainCheck = v; render(); toast("聞き取り状況を更新しました");
@@ -934,13 +964,16 @@ function openMember(id) {
     <div class="f2"><div class="f"><label>メールアドレス</label><input id="fEmail" type="email" value="${esc(m.email)}"></div>
     <div class="f"><label>電話番号</label><input id="fPhone" type="tel" value="${esc(m.phone)}"></div></div>
     <div class="f2"><div class="f"><label>LINE名など</label><input id="fContact" value="${esc(m.contact)}"></div>
-    <div class="f"><label>紹介者（誰の紹介で入会したか）</label><input id="fRef" value="${esc(m.referrer)}"></div></div>
+    <div class="f"><label>紹介者（誰の紹介で入会したか）</label><select id="fRefSel"><option value="">なし・不明</option>${membersArr().filter(x => x.id !== id).sort(byNo).map(x => `<option value="${x.id}" ${m.referrerId === x.id ? "selected" : ""}>${x.salonNo ? esc(x.salonNo) + " " : ""}${esc(x.name)}${x.nick ? "（" + esc(x.nick) + "）" : ""}</option>`).join("")}<option value="__other" ${!m.referrerId && m.referrer ? "selected" : ""}>会員以外（名前を入力）</option></select>
+      <input id="fRef" style="margin-top:6px" placeholder="紹介者の名前" value="${esc(!m.referrerId ? m.referrer : "")}"></div></div>
     <div class="f2"><div class="f"><label>契約書</label><select id="fContract">${Object.entries(CONTRACT).map(([k, v]) => `<option value="${k}" ${(m.contractStatus || "none") === k ? "selected" : ""}>${v}</option>`).join("")}</select></div>
     <div class="f"><label>締結日（送付日）</label><input id="fContractDate" type="date" value="${esc(m.contractDate)}"></div></div>
     <div class="f"><label>目標（例：月利10万円、店舗せどりで月30万円仕入れ）</label><input id="fGoal" value="${esc(m.goal)}"></div>
     <div class="f"><label>今の状況（実績など）</label><textarea id="fProgress" style="min-height:60px">${esc(m.progress)}</textarea></div>
     <div class="f"><label>メモ（会員の背景など）</label><textarea id="fMemo">${esc(m.memo)}</textarea></div>
     <div class="mact">${id ? `<button class="btn danger" style="margin-right:auto" onclick="delMember('${id}')">削除</button>` : ""}<button class="btn" onclick="closeModal()">キャンセル</button><button class="btn pri" onclick="saveMember(${id ? `'${id}'` : ""})">保存</button></div>`);
+  const refSync = () => $("fRef").classList.toggle("hidden", $("fRefSel").value !== "__other");
+  $("fRefSel").onchange = refSync; refSync();
   const sync = () => { const v = $("fStatus").value; $("leftWrap").classList.toggle("hidden", v !== "left" && v !== "leaving"); $("fLeftLbl").textContent = v === "leaving" ? "退会予定日（この月まで支払い対象）" : "退会日（この月まで支払い対象）"; };
   $("fStatus").onchange = sync; sync();
 }
@@ -955,7 +988,8 @@ async function saveMember(id) {
     leaveReason: $("fLeaveReason").value.trim(), leaveLog: $("fLeaveLog").value.trim(),
     entryFee: num($("fEntry").value), fee: num($("fFee").value), entryPaid: $("fEntryPaid").checked,
     nextMtg: $("fNext").value, nextMtgTime: $("fNext").value ? $("fNextTime").value : "", contact: $("fContact").value.trim(), memo: $("fMemo").value.trim(), updatedAt: Date.now(),
-    referrer: $("fRef").value.trim(), contractStatus: $("fContract").value, contractDate: $("fContractDate").value,
+    referrerId: ["", "__other"].includes($("fRefSel").value) ? "" : $("fRefSel").value,
+    referrer: $("fRefSel").value === "__other" ? $("fRef").value.trim() : "", contractStatus: $("fContract").value, contractDate: $("fContractDate").value,
     goal: $("fGoal").value.trim(), progress: $("fProgress").value.trim(), progressAt: ($("fProgress").value.trim() !== (state.members[id]?.progress || "")) ? todayStr() : (state.members[id]?.progressAt || "")
   };
   const newId = id || uid();
@@ -1122,7 +1156,7 @@ async function doBulk() {
 function exportCSV() {
   const k = curYM();
   const head = ["サロンNo", "氏名", "ふりがな", "あだ名", "コース", "状態", "入会日", "入会金", "入会金支払い", "月額", `${k}支払い`, "次回MTG", "前回MTG", "運営側でやること（未対応）", "メール", "電話番号", "LINE名など", "メモ", "紹介者", "契約書", "締結日", "目標", "今の状況", "注意・違反の件数"];
-  const rows = membersArr().map(m => [m.salonNo, m.name, m.kana, m.nick, COURSES[m.course], STATUS[m.status || "active"], m.joinDate, m.entryFee, m.entryPaid ? "済" : "未", m.fee, isPaid(m.id, k) ? "済" : "未", m.nextMtg, lastMtg(m.id), openCare(m.id).length, m.email, m.phone, m.contact, m.memo, m.referrer, CONTRACT[m.contractStatus || "none"], m.contractDate, m.goal, m.progress, warnCount(m.id)]);
+  const rows = membersArr().map(m => [m.salonNo, m.name, m.kana, m.nick, COURSES[m.course], STATUS[m.status || "active"], m.joinDate, m.entryFee, m.entryPaid ? "済" : "未", m.fee, isPaid(m.id, k) ? "済" : "未", m.nextMtg, lastMtg(m.id), openCare(m.id).length, m.email, m.phone, m.contact, m.memo, refName(m), CONTRACT[m.contractStatus || "none"], m.contractDate, m.goal, m.progress, warnCount(m.id)]);
   const csv = [head, ...rows].map(r => r.map(v => `"${String(v ?? "").replace(/"/g, '""')}"`).join(",")).join("\r\n");
   const a = document.createElement("a");
   a.href = URL.createObjectURL(new Blob(["﻿" + csv], { type: "text/csv" }));
