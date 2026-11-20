@@ -34,7 +34,19 @@ header{background:var(--dark);color:#fff;position:sticky;top:0;z-index:20;paddin
 nav{display:flex;gap:4px;margin-left:auto}
 nav button{background:none;border:0;color:#ccc;padding:6px 12px;border-radius:6px}
 nav button.on{background:#333;color:#fff}
-.user{font-size:12px;color:#999}
+.user{display:none}
+.hd{position:relative}
+.logo,.logo small{white-space:nowrap}
+nav button{white-space:nowrap}
+.mbar{display:flex;align-items:center;gap:6px;margin-left:10px;position:relative}
+.mbar>button{background:none;border:1px solid #555;color:#ddd;border-radius:6px;padding:4px 10px;font-size:13px;white-space:nowrap}
+.mbar>button:hover{border-color:var(--gold);color:#fff}
+#mBtn{font-size:16px;line-height:1;padding:5px 11px}
+.mmenu{position:absolute;top:calc(100% + 8px);right:0;background:#262624;border:1px solid #444;border-radius:10px;padding:10px;min-width:230px;display:flex;flex-direction:column;gap:6px;box-shadow:0 8px 24px rgba(0,0,0,.35);z-index:40}
+.mmenu.hidden{display:none}
+.mm-mail{font-size:12px;color:#aaa;padding:2px 4px 6px;border-bottom:1px solid #3a3a38;word-break:break-all}
+.mmenu button{background:none;border:0;color:#eee;text-align:left;padding:8px 6px;border-radius:6px;font-size:14px}
+.mmenu button:hover{background:#3a3833}
 .user button{background:none;border:1px solid #555;color:#ccc;border-radius:5px;padding:2px 8px;margin-left:6px;font-size:12px;white-space:nowrap}
 .demo{background:var(--gold);color:#fff;text-align:center;font-size:12px;padding:3px}
 
@@ -148,7 +160,8 @@ h3{font-size:15px;margin:0 0 8px}
   nav button{text-align:left;padding:10px 12px;font-size:15px;border-radius:8px}
   nav button:hover{background:#2a2a28;color:#fff}
   nav button.on{background:#3a3833;color:#fff;box-shadow:inset 3px 0 0 var(--gold)}
-  .user{margin-top:auto;display:flex;flex-direction:column;gap:6px}
+  .user{margin-top:auto;display:flex;flex-direction:column;gap:6px;font-size:12px}
+  .mbar{display:none}
   .user span{word-break:break-all;font-size:11px;color:#999;padding:0 4px 4px;line-height:1.4}
   .user button{margin-left:0;padding:8px 10px;text-align:left;font-size:13px;border-color:#444}
   .user button:hover{border-color:var(--gold);color:#fff}
@@ -169,7 +182,7 @@ h3{font-size:15px;margin:0 0 8px}
   .hd{flex-wrap:wrap;gap:8px;padding:10px 12px}
   nav{margin-left:0;order:3;width:100%}
   nav button{flex:1;white-space:nowrap;padding:6px 2px;font-size:14px}
-  .user{margin-left:auto}
+  .mbar{margin-left:auto}
   main{padding:12px}
   .f2{grid-template-columns:1fr}
   .hide-sp{display:none}
@@ -203,6 +216,15 @@ h3{font-size:15px;margin:0 0 8px}
         <button data-tab="arrears" onclick="go('arrears')">GAIN未入金</button>
       </nav>
       <div class="user"><span id="userEmail" class="hide-sp"></span><button onclick="refreshApp()" title="最新の状態に更新">↻ 更新</button><button onclick="openPw()">パスワード変更</button><button onclick="logout()">ログアウト</button></div>
+      <div class="mbar">
+        <button onclick="refreshApp()" title="最新の状態に更新">↻ 更新</button>
+        <button id="mBtn" onclick="toggleMenu(event)" aria-label="メニュー">☰</button>
+        <div id="mmenu" class="mmenu hidden" onclick="event.stopPropagation()">
+          <div class="mm-mail" id="mmEmail"></div>
+          <button onclick="toggleMenu();openPw()">パスワード変更</button>
+          <button onclick="toggleMenu();logout()">ログアウト</button>
+        </div>
+      </div>
     </div>
   </header>
   <main>
@@ -357,6 +379,12 @@ function refreshApp() {
   try { sessionStorage.setItem("gildUi", JSON.stringify({ tab: ui.tab, detailId: ui.detailId })); } catch (e) {}
   location.href = location.pathname + "?v=" + Date.now(); // キャッシュを使わずに読み込む
 }
+function toggleMenu(e) {
+  if (e) e.stopPropagation();
+  const el = $("mmenu"); el.classList.toggle("hidden");
+  $("mmEmail").textContent = "ログイン中：" + (DEMO ? "デモ" : auth?.email || "");
+}
+document.addEventListener("click", () => { const el = document.getElementById("mmenu"); if (el) el.classList.add("hidden"); });
 function logout() {
   sessionStorage.removeItem("gildAuth"); auth = null;
   if (DEMO) { location.reload(); return; }
