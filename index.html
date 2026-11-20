@@ -206,8 +206,9 @@ h3{font-size:15px;margin:0 0 8px}
 const CONFIG = {
   apiKey: "AIzaSyBzszVhMqVUbexsMmqUBSFVd09H1FtYMWY",
   databaseURL: "https://gild-members-default-rtdb.asia-southeast1.firebasedatabase.app",
-  allowedEmails: [   // ログインできるメールアドレス（代表2人は決まったらここに追加）
-    "kanetaka.hinako_02@icloud.com",
+  allowedEmails: [   // ログインできるメールアドレス（KANETAKA代表は決まったらここに追加）
+    "kanetaka.hinako_02@icloud.com", // Hina
+    "dorainpact@gmail.com",          // HAK代表
   ],
   hosts: ["KANETAKA代表", "HAK代表"], // ミーティング担当者の選択肢
   idleDays: 45      // この日数以上ミーティングしていない会員を「フォローが必要」に表示
@@ -220,7 +221,7 @@ const STATUS = { active: "在籍", paused: "休会", left: "退会" };
 let state = { members: {}, meetings: {}, payments: {}, arrears: {} };
 const CHECK = { unchecked: "未確認", has: "未入金あり", none: "未入金なし" };
 const ARR_ST = { unpaid: "未入金", settled: "精算済み" };
-const EVID = { line: "LINE", mail: "メール", slip: "納品書・伝票", bank: "振込・取引明細", photo: "写真・スクショ", other: "その他" };
+const EVID = { line: "LINE", mail: "メール", apply: "買取依頼書・買取申請", slip: "納品書・発送伝票", bank: "振込・取引明細", photo: "写真・スクショ", other: "その他" };
 const EV_ST = { pending: "まだ集めていない", requested: "会員に提出を依頼中", none: "存在しない（口頭のみ等）" };
 const hasEvid = x => (x.evidence || []).some(k => EVID[k]);
 // 証拠の状況：have=あり / pending=未収集 / requested=依頼中 / none=存在しない
