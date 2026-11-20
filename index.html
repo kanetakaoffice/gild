@@ -309,6 +309,17 @@ async function loadAll() {
 }
 
 /* ---------- 計算 ---------- */
+const byKana = (a, b) => (a.kana || a.name || "").localeCompare(b.kana || b.name || "", "ja");
+const byNo = (a, b) => (a.salonNo ? 0 : 1) - (b.salonNo ? 0 : 1) || String(a.salonNo || "").localeCompare(String(b.salonNo || ""), "ja", { numeric: true }) || byKana(a, b);
+function memSort(a, b) {
+  const k = ui.memSort || "no", dir = ui.memDir || 1;
+  const date = (x, y) => (x ? 0 : 1) - (y ? 0 : 1) || (x || "").localeCompare(y || "") * dir;
+  if (k === "kana") return byKana(a, b) * dir;
+  if (k === "next") return date(a.nextMtg, b.nextMtg) || byNo(a, b);
+  if (k === "last") return date(lastMtg(a.id), lastMtg(b.id)) || byNo(a, b);
+  return (a.salonNo ? 0 : 1) - (b.salonNo ? 0 : 1) || String(a.salonNo || "").localeCompare(String(b.salonNo || ""), "ja", { numeric: true }) * dir || byKana(a, b);
+}
+function setSort(k) { if ((ui.memSort || "no") === k) ui.memDir = -(ui.memDir || 1); else { ui.memSort = k; ui.memDir = 1; } renderMembersTable(); }
 const membersArr = () => Object.entries(state.members).map(([id, m]) => ({ id, ...m }));
 const meetingsOf = id => Object.entries(state.meetings).filter(([, x]) => x.memberId === id).map(([mid, x]) => ({ id: mid, ...x })).sort((a, b) => (b.date || "").localeCompare(a.date || ""));
 const lastMtg = id => meetingsOf(id)[0]?.date || "";
@@ -384,7 +395,7 @@ function renderMembers() {
   if (ui.course !== "all") list = list.filter(m => m.course === ui.course || (ui.course !== "both" && ui.course !== "none" && m.course === "both"));
   const q = ui.search.trim().toLowerCase();
   if (q) list = list.filter(m => [m.name, m.nick, m.kana, m.memo, m.salonNo, m.email, m.phone].some(v => String(v || "").toLowerCase().includes(q)));
-  list.sort((a, b) => (a.kana || a.name || "").localeCompare(b.kana || b.name || "", "ja"));
+  list.sort(memSort);
   const k = curYM();
   const chip = (key, val, label) => `<button class="chip ${ui[key] === val ? "on" : ""}" onclick="ui.${key}='${val}';renderMembers()">${label}</button>`;
   $("v-members").innerHTML = `
@@ -401,6 +412,10 @@ function renderMembers() {
   <div id="memTable"></div>`;
   renderMembersTable(list);
 }
+function sortTh(k, label, cls = "") {
+  const on = (ui.memSort || "no") === k, arrow = on ? ((ui.memDir || 1) > 0 ? " ▲" : " ▼") : "";
+  return `<th class="${cls}" style="cursor:pointer;${on ? "color:var(--ink)" : ""}" onclick="setSort('${k}')">${label}${arrow}</th>`;
+}
 function renderMembersTable(list) {
   if (!list) { // 検索入力時：フォーカスを保ったまま表だけ更新
     let l = membersArr();
@@ -408,13 +423,13 @@ function renderMembersTable(list) {
     if (ui.course !== "all") l = l.filter(m => m.course === ui.course || (ui.course !== "both" && ui.course !== "none" && m.course === "both"));
     const q = ui.search.trim().toLowerCase();
     if (q) l = l.filter(m => [m.name, m.nick, m.kana, m.memo, m.salonNo, m.email, m.phone].some(v => String(v || "").toLowerCase().includes(q)));
-    l.sort((a, b) => (a.kana || a.name || "").localeCompare(b.kana || b.name || "", "ja"));
+    l.sort(memSort);
     list = l;
   }
   const k = curYM();
   $("memTable").innerHTML = list.length ? `
   <div class="scroll"><table class="tbl">
-    <tr><th>No</th><th>氏名</th><th>あだ名</th><th>コース</th><th>次回MTG</th><th class="hide-sp">前回MTG</th><th>今月</th><th>ケア</th></tr>
+    <tr>${[["no", "No"], ["kana", "氏名"]].map(([k, l]) => sortTh(k, l)).join("")}<th>あだ名</th><th>コース</th>${sortTh("next", "次回MTG")}${sortTh("last", "前回MTG", "hide-sp")}<th>今月</th><th>ケア</th></tr>
     ${list.map(m => {
       const c = openCare(m.id).length;
       const pay = !monthApplies(m, k) ? `<span class="tag t-gray">対象外</span>` : isPaid(m.id, k) ? `<span class="tag t-green">済</span>` : `<span class="tag t-red">未</span>`;
@@ -482,7 +497,7 @@ function renderPay() {
   const y = ui.payYear;
   const months = Array.from({ length: 12 }, (_, i) => `${y}-${String(i + 1).padStart(2, "0")}`);
   const list = membersArr().filter(m => m.status !== "left" || months.some(k => monthApplies(m, k)))
-    .sort((a, b) => (a.kana || a.name || "").localeCompare(b.kana || b.name || "", "ja"));
+    .sort(byNo);
   const k = curYM();
   const unpaidCnt = months.map(mk => list.filter(m => monthApplies(m, mk) && !isPaid(m.id, mk) && mk <= k).length);
   $("v-pay").innerHTML = `
@@ -564,8 +579,8 @@ async function setCheck(id, v) {
 }
 function openArrear(memberId, aid) {
   const x = aid ? state.arrears[aid] : { date: "", qty: 1, status: "unpaid" };
-  const opts = membersArr().sort((a, b) => (a.kana || a.name).localeCompare(b.kana || b.name, "ja"))
-    .map(m => `<option value="${m.id}" ${m.id === (memberId || x.memberId) ? "selected" : ""}>${esc(m.name)}${m.nick ? "（" + esc(m.nick) + "）" : ""}</option>`).join("");
+  const opts = membersArr().sort(byNo)
+    .map(m => `<option value="${m.id}" ${m.id === (memberId || x.memberId) ? "selected" : ""}>${m.salonNo ? esc(m.salonNo) + " " : ""}${esc(m.name)}${m.nick ? "（" + esc(m.nick) + "）" : ""}</option>`).join("");
   modal(`<h3>${aid ? "未入金の編集" : "未入金を追加"}</h3>
     <div class="f"><label>会員 *</label><select id="aMem"><option value="">選択してください</option>${opts}</select></div>
     <div class="f2"><div class="f"><label>取引日 *</label><input id="aDate" type="date" value="${esc(x.date)}"></div>
