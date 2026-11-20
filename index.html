@@ -394,8 +394,11 @@ function memSort(a, b) {
 }
 function setSort(k) { if ((ui.memSort || "no") === k) ui.memDir = -(ui.memDir || 1); else { ui.memSort = k; ui.memDir = 1; } renderMembersTable(); }
 const membersArr = () => Object.entries(state.members).map(([id, m]) => ({ id, ...m }));
-const meetingsOf = id => Object.entries(state.meetings).filter(([, x]) => x.memberId === id).map(([mid, x]) => ({ id: mid, ...x })).sort((a, b) => (b.date || "").localeCompare(a.date || ""));
-const lastMtg = id => meetingsOf(id)[0]?.date || "";
+const meetingsOf = id => Object.entries(state.meetings).filter(([, x]) => x.memberId === id).map(([mid, x]) => ({ id: mid, ...x })).sort((a, b) => (a.date ? 0 : 1) - (b.date ? 0 : 1) || (b.date || "").localeCompare(a.date || ""));
+const lastMtg = id => meetingsOf(id).find(x => x.date)?.date || "";
+const hasMtg = id => meetingsOf(id).length > 0;
+const lastLabel = (id, long) => lastMtg(id) ? (long ? fmtDY(lastMtg(id)) : fmtD(lastMtg(id))) : hasMtg(id) ? "日付不明" : (long ? "記録なし" : "—");
+const nextLabel = (m, long) => m.nextMtg ? (long ? fmtDY(m.nextMtg) : fmtD(m.nextMtg)) + (m.nextMtgTime ? " " + m.nextMtgTime + "〜" : "") : "—";
 const openCare = id => meetingsOf(id).filter(x => x.care && !x.careDone);
 const isPaid = (id, k) => !!state.payments[id]?.[k];
 function monthApplies(m, k) {
@@ -431,7 +434,7 @@ function renderHome() {
   cares.sort((a, b) => (b.x.date || "").localeCompare(a.x.date || ""));
   const k = curYM();
   const unpaid = act.filter(m => m.status === "active" && monthApplies(m, k) && !isPaid(m.id, k));
-  const idle = act.filter(m => m.status === "active" && !m.nextMtg && (!lastMtg(m.id) || daysFrom(lastMtg(m.id)) <= -CONFIG.idleDays));
+  const idle = act.filter(m => m.status === "active" && !m.nextMtg && (!hasMtg(m.id) || (lastMtg(m.id) && daysFrom(lastMtg(m.id)) <= -CONFIG.idleDays)));
 
   const nm = m => `<span class="nm" onclick="go('detail','${m.id}')">${esc(m.name)}</span>${m.nick ? ` <span class="meta">（${esc(m.nick)}）</span>` : ""}`;
 
@@ -443,11 +446,11 @@ function renderHome() {
           const d = daysFrom(m.nextMtg);
           const badge = d < 0 ? `<span class="tag t-red">${-d}日過ぎています</span>` : d === 0 ? `<span class="tag t-red">今日</span>` : `<span class="tag t-gray">あと${d}日</span>`;
           const c = openCare(m.id).length;
-          return `<div class="row"><div class="grow">${nm(m)} ${courseTag(m.course)}<div class="meta">${fmtD(m.nextMtg)}　前回：${fmtD(lastMtg(m.id))}${c ? `　<span class="tag t-red">要ケア ${c}</span>` : ""}</div></div>${badge}</div>`;
+          return `<div class="row"><div class="grow">${nm(m)} ${courseTag(m.course)}<div class="meta">${nextLabel(m)}　前回：${lastLabel(m.id)}${c ? `　<span class="tag t-red">要ケア ${c}</span>` : ""}</div></div>${badge}</div>`;
         }).join("") : `<div class="empty">予定はありません</div>`}
       </div>
       <div class="card"><h3>フォローが必要（${CONFIG.idleDays}日以上ミーティングなし・次回未定）<span class="cnt">${idle.length}</span></h3>
-        ${idle.length ? idle.map(m => `<div class="row"><div class="grow">${nm(m)} ${courseTag(m.course)}<div class="meta">前回：${lastMtg(m.id) ? fmtDY(lastMtg(m.id)) : "記録なし"}</div></div><button class="btn sm" onclick="openMeeting('${m.id}')">記録を追加</button></div>`).join("") : `<div class="empty">該当する会員はいません</div>`}
+        ${idle.length ? idle.map(m => `<div class="row"><div class="grow">${nm(m)} ${courseTag(m.course)}<div class="meta">前回：${lastLabel(m.id, true)}</div></div><button class="btn sm" onclick="openMeeting('${m.id}')">記録を追加</button></div>`).join("") : `<div class="empty">該当する会員はいません</div>`}
       </div>
     </div>
     <div>
@@ -476,6 +479,7 @@ function renderMembers() {
     <input type="search" placeholder="名前・あだ名・サロンNo・メールで検索" value="${esc(ui.search)}" oninput="ui.search=this.value;renderMembersTable()">
     <button class="btn gold" onclick="openMember()">＋ 会員を追加</button>
     <button class="btn" onclick="openBulk()">まとめて登録</button>
+    <button class="btn" onclick="openSched()">MTG予定をまとめて登録</button>
     <button class="btn hide-sp" onclick="exportCSV()">CSVで書き出し</button>
   </div>
   <div class="toolbar">
@@ -509,7 +513,7 @@ function renderMembersTable(list) {
       return `<tr class="click ${m.status === "left" ? "left" : ""}" onclick="go('detail','${m.id}')">
         <td class="meta">${esc(m.salonNo || "")}</td><td><b>${esc(m.name)}</b>${m.status && m.status !== "active" ? ` <span class="tag t-gray">${STATUS[m.status]}</span>` : ""}</td>
         <td>${esc(m.nick || "")}</td><td>${courseTag(m.course)}</td>
-        <td>${fmtD(m.nextMtg)}</td><td class="hide-sp">${fmtD(lastMtg(m.id))}</td>
+        <td>${nextLabel(m)}</td><td class="hide-sp">${lastLabel(m.id)}</td>
         <td>${pay}</td><td>${c ? `<span class="tag t-red">${c}件</span>` : ""}</td></tr>`;
     }).join("")}
   </table></div>
@@ -537,7 +541,7 @@ function renderDetail() {
       <dt>入会日</dt><dd>${fmtDY(m.joinDate)}</dd>
       <dt>入会金</dt><dd>${yen(m.entryFee)}　${m.entryPaid ? `<span class="tag t-green">支払い済み</span>` : `<span class="tag t-red">未払い</span>`} <button class="btn sm" onclick="toggleEntry('${id}')">${m.entryPaid ? "未払いに戻す" : "支払い済みにする"}</button></dd>
       <dt>月額</dt><dd>${yen(m.fee)}</dd>
-      <dt>次回MTG</dt><dd><b>${fmtDY(m.nextMtg)}</b></dd>
+      <dt>次回MTG</dt><dd><b>${nextLabel(m, true)}</b></dd>
       ${m.email ? `<dt>メール</dt><dd><a href="mailto:${esc(m.email)}">${esc(m.email)}</a></dd>` : ""}
       ${m.phone ? `<dt>電話番号</dt><dd><a href="tel:${esc(m.phone)}">${esc(m.phone)}</a></dd>` : ""}
       ${m.contact ? `<dt>LINE名など</dt><dd>${esc(m.contact)}</dd>` : ""}
@@ -557,7 +561,7 @@ function renderDetail() {
   <h2>ミーティング記録 <span class="hint">${mt.length}件</span></h2>
   ${mt.length ? mt.map(x => `
     <div class="mtg">
-      <div class="top"><span class="dt">${fmtDY(x.date)}</span>${x.host ? `<span class="tag t-gray">${esc(x.host)}</span>` : ""}
+      <div class="top"><span class="dt">${x.date ? fmtDY(x.date) : `<span class="tag t-orange">日付不明</span>`}</span>${x.host ? `<span class="tag t-gray">${esc(x.host)}</span>` : ""}
         <div class="acts"><button class="btn sm" onclick="openMeeting('${id}','${x.id}')">編集</button><button class="btn sm danger" onclick="delMeeting('${x.id}')">削除</button></div></div>
       ${x.care ? `<div class="lbl">ケアすべきこと ${x.careDone ? `<span class="tag t-gray">対応済み</span>` : ""} <button class="btn sm" style="margin-left:6px" onclick="toggleCare('${x.id}')">${x.careDone ? "未対応に戻す" : "対応済みにする"}</button></div><div class="care ${x.careDone ? "done" : ""}">${esc(x.care)}</div>` : ""}
       ${x.next ? `<div class="lbl">次回やること</div><div class="nxt">${esc(x.next)}</div>` : ""}
@@ -761,7 +765,8 @@ function openMember(id) {
     <div class="f2"><div class="f"><label>入会金（円）</label><input id="fEntry" type="number" inputmode="numeric" value="${esc(m.entryFee)}"></div>
     <div class="f"><label>月額（円）</label><input id="fFee" type="number" inputmode="numeric" value="${esc(m.fee)}"></div></div>
     <div class="f chk"><input type="checkbox" id="fEntryPaid" ${m.entryPaid ? "checked" : ""}><label for="fEntryPaid" style="margin:0;color:inherit;font-size:14px">入会金は支払い済み</label></div>
-    <div class="f"><label>次回ミーティング日</label><input id="fNext" type="date" value="${esc(m.nextMtg)}"></div>
+    <div class="f2"><div class="f"><label>次回ミーティング日</label><input id="fNext" type="date" value="${esc(m.nextMtg)}"></div>
+    <div class="f"><label>開始時刻</label><input id="fNextTime" type="time" value="${esc(m.nextMtgTime)}"></div></div>
     <div class="f2"><div class="f"><label>メールアドレス</label><input id="fEmail" type="email" value="${esc(m.email)}"></div>
     <div class="f"><label>電話番号</label><input id="fPhone" type="tel" value="${esc(m.phone)}"></div></div>
     <div class="f"><label>LINE名など</label><input id="fContact" value="${esc(m.contact)}"></div>
@@ -779,7 +784,7 @@ async function saveMember(id) {
     name, kana: $("fKana").value.trim(), nick: $("fNick").value.trim(), course: $("fCourse").value,
     joinDate: $("fJoin").value, status: $("fStatus").value, leftDate: $("fStatus").value === "left" ? $("fLeft").value : "",
     entryFee: num($("fEntry").value), fee: num($("fFee").value), entryPaid: $("fEntryPaid").checked,
-    nextMtg: $("fNext").value, contact: $("fContact").value.trim(), memo: $("fMemo").value.trim(), updatedAt: Date.now()
+    nextMtg: $("fNext").value, nextMtgTime: $("fNext").value ? $("fNextTime").value : "", contact: $("fContact").value.trim(), memo: $("fMemo").value.trim(), updatedAt: Date.now()
   };
   const newId = id || uid();
   state.members[newId] = { ...(state.members[newId] || { createdAt: Date.now() }), ...data };
@@ -802,17 +807,16 @@ function openMeeting(memberId, mid) {
   const m = state.members[memberId];
   const x = mid ? state.meetings[mid] : { date: todayStr(), host: "" };
   modal(`<h3>ミーティング記録 — ${esc(m.name)}${m.nick ? `（${esc(m.nick)}）` : ""}</h3>
-    <div class="f2"><div class="f"><label>日付</label><input id="mDate" type="date" value="${esc(x.date)}"></div>
+    <div class="f2"><div class="f"><label>日付（不明なら空欄）</label><input id="mDate" type="date" value="${esc(x.date)}"></div>
     <div class="f"><label>担当</label><select id="mHost"><option value="">—</option>${CONFIG.hosts.map(h => `<option ${x.host === h ? "selected" : ""}>${esc(h)}</option>`).join("")}<option value="両代表" ${x.host === "両代表" ? "selected" : ""}>両代表</option></select></div></div>
     <div class="f"><label>議事録（そのまま貼り付けOK）</label><textarea id="mNotes" style="min-height:140px">${esc(x.notes)}</textarea></div>
     <div class="f"><label>ケアすべきこと（ホームの「未対応のケア事項」に表示されます）</label><textarea id="mCare">${esc(x.care)}</textarea></div>
     <div class="f"><label>次回やること・宿題</label><textarea id="mNext" style="min-height:60px">${esc(x.next)}</textarea></div>
-    <div class="f"><label>次回ミーティング日（会員情報の「次回MTG」も更新されます）</label><input id="mNextDate" type="date" value="${mid ? "" : ""}"><div class="hint">現在の次回MTG：${fmtDY(m.nextMtg)}　空欄なら変更しません（今日のMTGが次回予定日だった場合は自動で消えます）</div></div>
+    <div class="f"><label>次回ミーティング日（会員情報の「次回MTG」も更新されます）</label><div class="f2" style="margin:0"><input id="mNextDate" type="date"><input id="mNextTime" type="time"></div><div class="hint">現在の次回MTG：${fmtDY(m.nextMtg)}　空欄なら変更しません（今日のMTGが次回予定日だった場合は自動で消えます）</div></div>
     <div class="mact"><button class="btn" onclick="closeModal()">キャンセル</button><button class="btn pri" onclick="saveMeeting('${memberId}'${mid ? `,'${mid}'` : ""})">保存</button></div>`);
 }
 async function saveMeeting(memberId, mid) {
   const date = $("mDate").value;
-  if (!date) { alert("日付を入力してください"); return; }
   const data = { memberId, date, host: $("mHost").value, notes: $("mNotes").value.trim(), care: $("mCare").value.trim(), next: $("mNext").value.trim(), updatedAt: Date.now(), by: auth?.email || "demo" };
   const newId = mid || uid();
   if (!mid) data.careDone = false;
@@ -820,12 +824,74 @@ async function saveMeeting(memberId, mid) {
   // 次回MTG日の更新
   const m = state.members[memberId], nd = $("mNextDate").value;
   let patch = null;
-  if (nd) patch = { nextMtg: nd };
-  else if (!mid && m.nextMtg && m.nextMtg <= date) patch = { nextMtg: "" };
+  if (nd) patch = { nextMtg: nd, nextMtgTime: $("mNextTime").value };
+  else if (!mid && date && m.nextMtg && m.nextMtg <= date) patch = { nextMtg: "", nextMtgTime: "" };
   if (patch) Object.assign(m, patch);
   closeModal(); render(); toast("保存しました");
   await save(mid ? "PATCH" : "PUT", `meetings/${newId}`, mid ? data : state.meetings[newId]);
   if (patch) await save("PATCH", `members/${memberId}`, patch);
+}
+
+/* ---------- MTG予定・実施状況のまとめて登録 ---------- */
+function openSched() {
+  modal(`<h3>ミーティング予定をまとめて登録</h3>
+    <p class="hint">全体ミーティング後に組んだ個別ミーティングの一覧を、そのまま貼り付けられます。1行に1人、<b>サロンNo（先頭の数字）・日時 または「済」</b>を読み取ります。<br>
+    ・今日より後の日時 → 「次回MTG」に予定として登録<br>・今日以前の日時 → その日付で「実施済み」のミーティング記録を作成<br>・「済」だけ → 「実施済み（日付不明）」の記録を作成<br>・日時も「済」もない行 → 何もしません<br>
+    行に「ANDO」「HAK」があれば担当をHAK代表、「KANETAKA」があればKANETAKA代表にします。同じ内容の記録がすでにある場合は二重に作りません。</p>
+    <div class="f"><label>記録に付けるメモ</label><input id="schNote" value="全体ミーティング後の個別ミーティング"></div>
+    <div class="f"><textarea id="schTxt" style="min-height:220px" placeholder="01きくりん　済&#10;05toshi　11/17 19:00~&#10;42うめさか　11/11 23:00~ ANDO"></textarea></div>
+    <div id="schPrev"></div>
+    <div class="mact"><button class="btn" onclick="closeModal()">キャンセル</button><button class="btn" onclick="previewSched()">確認する</button><button class="btn pri" id="schGo" onclick="doSched()" disabled>登録</button></div>`);
+  $("schTxt").oninput = () => { $("schGo").disabled = true; $("schPrev").innerHTML = ""; };
+}
+function parseSched() {
+  const byNoMap = {}; membersArr().forEach(m => { if (m.salonNo) byNoMap[String(Number(m.salonNo))] = m; });
+  const t = todayStr(), y = Number(t.slice(0, 4)), cm = Number(t.slice(5, 7));
+  const rows = [], bad = [];
+  for (const raw of $("schTxt").value.split(/\r?\n/)) {
+    const l = raw.replace(/[０-９]/g, c => String.fromCharCode(c.charCodeAt(0) - 0xFEE0)).replace(/：/g, ":").replace(/／/g, "/").trim();
+    if (!l || /^【/.test(l)) continue;
+    const mNo = l.match(/^(\d{1,4})/); if (!mNo) { bad.push(raw + "（先頭にサロンNoがありません）"); continue; }
+    const m = byNoMap[String(Number(mNo[1]))]; if (!m) { bad.push(raw + "（このサロンNoの会員がいません）"); continue; }
+    const rest = l.slice(mNo[1].length);
+    const host = /ANDO|安藤|HAK/i.test(rest) ? "HAK代表" : /KANETAKA|金髙|金高/i.test(rest) ? "KANETAKA代表" : "";
+    const d = rest.match(/(?:(\d{4})[\/\-年])?(\d{1,2})[\/月](\d{1,2})日?/), tm = rest.match(/(\d{1,2}):(\d{2})/);
+    if (d) {
+      let yy = d[1] ? Number(d[1]) : y; const mo = Number(d[2]);
+      if (!d[1] && mo - cm > 6) yy--; if (!d[1] && cm - mo > 6) yy++;
+      const date = `${yy}-${String(mo).padStart(2, "0")}-${String(Number(d[3])).padStart(2, "0")}`, time = tm ? `${tm[1].padStart(2, "0")}:${tm[2]}` : "";
+      rows.push({ m, kind: date > t ? "next" : "done", date, time, host });
+    } else if (/済/.test(rest)) rows.push({ m, kind: "doneUnknown", date: "", time: "", host });
+  }
+  return { rows, bad };
+}
+function previewSched() {
+  const { rows, bad } = parseSched();
+  const lab = r => r.kind === "next" ? `<span class="tag t-blue" style="background:var(--blue-soft);color:var(--blue)">次回予定</span> ${fmtDY(r.date)}${r.time ? " " + r.time + "〜" : ""}`
+    : r.kind === "done" ? `<span class="tag t-green">実施済み</span> ${fmtDY(r.date)}${r.time ? " " + r.time + "〜" : ""}` : `<span class="tag t-green">実施済み</span> <span class="tag t-orange">日付不明</span>`;
+  $("schPrev").innerHTML = `<div class="hint" style="margin-bottom:6px">${rows.length}人分を読み取りました。名前とあだ名が合っているか確認してから「登録」を押してください。</div>
+    <div class="scroll" style="max-height:260px;overflow:auto;border:1px solid var(--line);border-radius:8px"><table class="tbl" style="border:0">
+    <tr><th>No</th><th>氏名（あだ名）</th><th>登録内容</th><th>担当</th></tr>
+    ${rows.map(r => `<tr><td>${esc(r.m.salonNo)}</td><td>${esc(r.m.name)}${r.m.nick ? `（${esc(r.m.nick)}）` : ""}</td><td>${lab(r)}</td><td>${esc(r.host)}</td></tr>`).join("")}</table></div>
+    ${bad.length ? `<div class="err" style="margin-top:8px">読み取れなかった行：<br>${bad.map(esc).join("<br>")}</div>` : ""}`;
+  $("schGo").disabled = !rows.length;
+}
+async function doSched() {
+  const { rows } = parseSched(), note = $("schNote").value.trim();
+  const addM = {}, patches = {}; let nNext = 0, nDone = 0, skip = 0;
+  for (const r of rows) {
+    if (r.kind === "next") { patches[r.m.id] = { nextMtg: r.date, nextMtgTime: r.time }; nNext++; continue; }
+    const dup = meetingsOf(r.m.id).some(x => (x.date || "") === r.date && (r.kind === "done" || (x.notes || "").includes(note)));
+    if (dup) { skip++; continue; }
+    addM[uid()] = { memberId: r.m.id, date: r.date, host: r.host, notes: note + (r.time ? `（${r.time}〜）` : ""), care: "", next: "", careDone: false, createdAt: Date.now(), by: auth?.email || "demo" };
+    if (r.m.nextMtg && r.date && r.m.nextMtg <= r.date) patches[r.m.id] = { ...(patches[r.m.id] || {}), nextMtg: "", nextMtgTime: "" };
+    nDone++;
+  }
+  Object.assign(state.meetings, addM);
+  for (const [id, pt] of Object.entries(patches)) Object.assign(state.members[id], pt);
+  closeModal(); render(); toast(`次回予定${nNext}件・実施済み${nDone}件を登録しました${skip ? `（登録済み${skip}件はスキップ）` : ""}`);
+  if (Object.keys(addM).length) await save("PATCH", "meetings", addM);
+  for (const [id, pt] of Object.entries(patches)) await save("PATCH", `members/${id}`, pt);
 }
 
 /* ---------- まとめて登録・書き出し ---------- */
