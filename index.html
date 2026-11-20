@@ -35,7 +35,7 @@ nav{display:flex;gap:4px;margin-left:auto}
 nav button{background:none;border:0;color:#ccc;padding:6px 12px;border-radius:6px}
 nav button.on{background:#333;color:#fff}
 .user{font-size:12px;color:#999}
-.user button{background:none;border:1px solid #555;color:#ccc;border-radius:5px;padding:2px 8px;margin-left:6px;font-size:12px}
+.user button{background:none;border:1px solid #555;color:#ccc;border-radius:5px;padding:2px 8px;margin-left:6px;font-size:12px;white-space:nowrap}
 .demo{background:var(--gold);color:#fff;text-align:center;font-size:12px;padding:3px}
 
 main{max-width:1100px;margin:0 auto;padding:18px}
@@ -168,6 +168,7 @@ h3{font-size:15px;margin:0 0 8px}
     <div class="f"><label>パスワード</label><input id="lgPass" type="password" autocomplete="current-password"></div>
     <div class="err" id="lgErr"></div>
     <button class="btn pri" style="width:100%;padding:10px" onclick="doLogin()">ログイン</button>
+    <div style="text-align:center;margin-top:14px"><button class="back" style="margin:0;font-size:13px;text-decoration:underline" onclick="forgotPw()">パスワードを忘れた場合</button></div>
   </div>
 </div>
 
@@ -183,7 +184,7 @@ h3{font-size:15px;margin:0 0 8px}
         <button data-tab="pay" onclick="go('pay')">支払い</button>
         <button data-tab="arrears" onclick="go('arrears')">GAIN未入金</button>
       </nav>
-      <div class="user"><span id="userEmail"></span><button onclick="logout()">ログアウト</button></div>
+      <div class="user"><span id="userEmail" class="hide-sp"></span><button onclick="refreshApp()" title="最新の状態に更新">↻ 更新</button><button onclick="openPw()">パスワード変更</button><button onclick="logout()">ログアウト</button></div>
     </div>
   </header>
   <main>
@@ -284,6 +285,59 @@ async function token() {
   auth.idToken = j.id_token; auth.refreshToken = j.refresh_token; auth.exp = Date.now() + (Number(j.expires_in) - 60) * 1000;
   sessionStorage.setItem("gildAuth", JSON.stringify(auth));
   return auth.idToken;
+}
+/* ---------- パスワード変更・再設定 ---------- */
+const AUTH_ERR = { INVALID_PASSWORD: "現在のパスワードが違います", INVALID_LOGIN_CREDENTIALS: "現在のパスワードが違います", WEAK_PASSWORD: "新しいパスワードは6文字以上にしてください", TOO_MANY_ATTEMPTS_TRY_LATER: "試行回数が多すぎます。しばらく待ってからお試しください" };
+function openPw() {
+  if (DEMO) { alert("デモモードではパスワードを変更できません"); return; }
+  modal(`<h3>パスワード変更</h3>
+    <p class="hint">ログイン中：${esc(auth.email)}</p>
+    <div class="f"><label>現在のパスワード</label><input id="pwOld" type="password" autocomplete="current-password"></div>
+    <div class="f"><label>新しいパスワード（6文字以上）</label><input id="pwNew" type="password" autocomplete="new-password"></div>
+    <div class="f"><label>新しいパスワード（確認のためもう一度）</label><input id="pwNew2" type="password" autocomplete="new-password"></div>
+    <div class="err" id="pwErr"></div>
+    <div class="mact"><button class="btn" onclick="closeModal()">キャンセル</button><button class="btn pri" id="pwBtn" onclick="changePw()">変更する</button></div>`);
+}
+async function changePw() {
+  const oldP = $("pwOld").value, p1 = $("pwNew").value, p2 = $("pwNew2").value;
+  $("pwErr").textContent = "";
+  if (!oldP || !p1) { $("pwErr").textContent = "すべての欄を入力してください"; return; }
+  if (p1.length < 6) { $("pwErr").textContent = "新しいパスワードは6文字以上にしてください"; return; }
+  if (p1 !== p2) { $("pwErr").textContent = "新しいパスワードが一致しません"; return; }
+  $("pwBtn").disabled = true;
+  try {
+    // 本人確認のため、現在のパスワードでログインし直してから変更する
+    let r = await fetch(`https://identitytoolkit.googleapis.com/v1/accounts:signInWithPassword?key=${CONFIG.apiKey}`, {
+      method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ email: auth.email, password: oldP, returnSecureToken: true }) });
+    let j = await r.json(); if (!r.ok) throw new Error(j.error?.message || "error");
+    r = await fetch(`https://identitytoolkit.googleapis.com/v1/accounts:update?key=${CONFIG.apiKey}`, {
+      method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ idToken: j.idToken, password: p1, returnSecureToken: true }) });
+    j = await r.json(); if (!r.ok) throw new Error(j.error?.message || "error");
+    auth = { email: auth.email, idToken: j.idToken, refreshToken: j.refreshToken, exp: Date.now() + (Number(j.expiresIn) - 60) * 1000 };
+    sessionStorage.setItem("gildAuth", JSON.stringify(auth));
+    closeModal(); toast("パスワードを変更しました");
+  } catch (e) {
+    const code = String(e.message).split(" ")[0];
+    $("pwErr").textContent = AUTH_ERR[code] || "変更できませんでした（" + e.message + "）";
+    $("pwBtn").disabled = false;
+  }
+}
+async function forgotPw() {
+  const email = $("lgEmail").value.trim();
+  if (!email) { $("lgErr").textContent = "先にメールアドレスを入力してから押してください"; return; }
+  if (CONFIG.allowedEmails.length && !CONFIG.allowedEmails.includes(email)) { $("lgErr").textContent = "このメールアドレスは利用できません"; return; }
+  try {
+    const r = await fetch(`https://identitytoolkit.googleapis.com/v1/accounts:sendOobCode?key=${CONFIG.apiKey}`, {
+      method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ requestType: "PASSWORD_RESET", email }) });
+    if (!r.ok) throw new Error();
+    $("lgErr").style.color = "var(--green)";
+    $("lgErr").textContent = "パスワード再設定のメールを送りました。メール内のリンクから新しいパスワードを設定してください（迷惑メールフォルダも確認してください）";
+  } catch (e) { $("lgErr").style.color = ""; $("lgErr").textContent = "メールを送れませんでした。時間をおいてお試しください"; }
+}
+/* ---------- 更新（最新のデータ・最新版のページを読み込み直す） ---------- */
+function refreshApp() {
+  try { sessionStorage.setItem("gildUi", JSON.stringify({ tab: ui.tab, detailId: ui.detailId })); } catch (e) {}
+  location.href = location.pathname + "?v=" + Date.now(); // キャッシュを使わずに読み込む
 }
 function logout() {
   sessionStorage.removeItem("gildAuth"); auth = null;
@@ -850,7 +904,10 @@ async function startApp() {
   $("userEmail").textContent = DEMO ? "デモ" : auth.email;
   if (DEMO) { $("demoBar").classList.remove("hidden"); demoData(); }
   else { try { await loadAll(); } catch (e) { alert("データの読み込みに失敗しました: " + e.message); } }
-  go("home");
+  let back = null;
+  try { back = JSON.parse(sessionStorage.getItem("gildUi") || "null"); sessionStorage.removeItem("gildUi"); } catch (e) {}
+  if (location.search) history.replaceState(null, "", location.pathname);
+  if (back && back.tab && (back.tab !== "detail" || state.members[back.detailId])) go(back.tab, back.detailId); else go("home");
 }
 (function init() {
   if (DEMO) { startApp(); return; }
