@@ -517,17 +517,21 @@ function renderPay() {
 }
 
 /* ---------- GAIN未入金 ---------- */
-const arrOf = id => Object.entries(state.arrears).filter(([, x]) => x.memberId === id).map(([aid, x]) => ({ id: aid, ...x })).sort((a, b) => (a.date || "").localeCompare(b.date || ""));
-const arrAmt = x => Number(x.amount ?? (Number(x.qty || 0) * Number(x.unitPrice || 0))) || 0;
+const arrOf = id => Object.entries(state.arrears).filter(([, x]) => x.memberId === id).map(([aid, x]) => ({ id: aid, ...x })).sort((a, b) => (a.date ? 0 : 1) - (b.date ? 0 : 1) || (a.date || "").localeCompare(b.date || ""));
+const amtUnknown = x => (x.amount === null || x.amount === undefined || x.amount === "") && !(x.qty != null && x.unitPrice != null);
+const arrAmt = x => amtUnknown(x) ? 0 : (Number(x.amount ?? (Number(x.qty || 0) * Number(x.unitPrice || 0))) || 0);
+const isOpen = x => (x.status || "unpaid") === "unpaid";
+const needFill = x => isOpen(x) && (!x.date || amtUnknown(x));
+const openQty = l => l.filter(isOpen).reduce((s, x) => s + (Number(x.qty) || 0), 0);
 const arrSum = (list, st) => list.filter(x => !st || (x.status || "unpaid") === st).reduce((s, x) => s + arrAmt(x), 0);
 function arrTable(list, memberId) {
   if (!list.length) return `<div class="empty">記録はありません</div>`;
   return `<div class="scroll"><table class="tbl">
     <tr><th>取引日</th><th>商品</th><th style="text-align:right">個数</th><th style="text-align:right">単価</th><th style="text-align:right">金額</th><th>状態</th><th>証拠</th><th class="hide-sp">メモ</th><th class="noprint"></th></tr>
     ${list.map(x => `<tr class="${x.status === "settled" ? "left" : ""}">
-      <td>${fmtDY(x.date)}</td><td style="white-space:normal">${esc(x.item)}</td>
+      <td>${x.date ? fmtDY(x.date) : `<span class="tag t-orange">日付不明</span>`}</td><td style="white-space:normal">${esc(x.item)}</td>
       <td style="text-align:right">${x.qty ?? ""}</td><td style="text-align:right">${x.unitPrice != null ? Number(x.unitPrice).toLocaleString() : ""}</td>
-      <td style="text-align:right"><b>${arrAmt(x).toLocaleString()}</b></td>
+      <td style="text-align:right">${amtUnknown(x) ? `<span class="tag t-orange">金額未確定</span>` : `<b>${arrAmt(x).toLocaleString()}</b>`}</td>
       <td>${x.status === "settled" ? `<span class="tag t-green">精算済み</span><div class="meta">${fmtD(x.settledDate)}${x.settledBy ? " " + esc(x.settledBy) : ""}</div>` : `<span class="tag t-red">未入金</span>`}</td>
       <td style="white-space:normal">${evCell(x)}</td>
       <td class="hide-sp" style="white-space:normal;font-size:12px">${esc(x.note)}</td>
@@ -539,33 +543,36 @@ function renderArrears() {
   const mem = membersArr();
   const total = arrSum(all, "unpaid"), settled = arrSum(all, "settled");
   const checked = mem.filter(m => m.gainCheck && m.gainCheck !== "unchecked").length;
-  let list = mem.map(m => { const l = arrOf(m.id); return { m, l, unpaid: arrSum(l, "unpaid"), settled: arrSum(l, "settled") }; });
+  let list = mem.map(m => { const l = arrOf(m.id); return { m, l, unpaid: arrSum(l, "unpaid"), settled: arrSum(l, "settled"), open: l.filter(isOpen).length, qty: openQty(l), unk: l.filter(x => isOpen(x) && amtUnknown(x)).length }; });
   const f = ui.arrFilter || "unpaid";
-  if (f === "settled") list = list.filter(r => r.l.length && r.unpaid === 0);
+  if (f === "settled") list = list.filter(r => r.l.length && r.open === 0);
   if (f === "unchecked") list = list.filter(r => !r.m.gainCheck || r.m.gainCheck === "unchecked");
-  if (f === "unpaid") list = list.filter(r => r.unpaid > 0);
+  if (f === "unpaid") list = list.filter(r => r.open > 0);
+  if (f === "fill") list = list.filter(r => r.l.some(needFill)).map(r => ({ ...r, l: r.l.filter(needFill) }));
   if (f === "needev") list = list.filter(r => r.l.some(needEv)).map(r => ({ ...r, l: r.l.filter(needEv) }));
   if (f === "noev") list = list.filter(r => r.l.some(noEv)).map(r => ({ ...r, l: r.l.filter(noEv) }));
   const needAmt = all.filter(needEv).reduce((s, x) => s + arrAmt(x), 0);
   const noAmt = all.filter(noEv).reduce((s, x) => s + arrAmt(x), 0);
-  list.sort((a, b) => b.unpaid - a.unpaid || (a.m.kana || a.m.name).localeCompare(b.m.kana || b.m.name, "ja"));
+  const unkCnt = all.filter(x => isOpen(x) && amtUnknown(x)).length, dateCnt = all.filter(x => isOpen(x) && !x.date).length;
+  const openCnt = all.filter(isOpen).length, qtyAll = openQty(all);
+  list.sort((a, b) => b.unpaid - a.unpaid || b.open - a.open || byNo(a.m, b.m));
   const chip = (v, label) => `<button class="chip ${f === v ? "on" : ""}" onclick="ui.arrFilter='${v}';renderArrears()">${label}</button>`;
   $("v-arrears").innerHTML = `
   <div class="printonly"><h2>GILD　GAIN代表による会員への未入金一覧（${fmtDY(todayStr())} 時点）</h2></div>
   <div class="grid3">
-    <div class="card stat"><div class="hint">未入金 合計</div><div class="num red">${total.toLocaleString()}<small>円</small></div>${needAmt ? `<div class="meta">うち証拠を集める必要あり ${needAmt.toLocaleString()}円</div>` : ""}${noAmt ? `<div class="meta">うち証拠が存在しない ${noAmt.toLocaleString()}円</div>` : ""}</div>
+    <div class="card stat"><div class="hint">未入金 合計</div><div class="num red">${total.toLocaleString()}<small>円</small></div><div class="meta">${openCnt}件・${qtyAll}個</div>${unkCnt ? `<div class="meta" style="color:#a8661c">ほかに金額未確定 ${unkCnt}件</div>` : ""}${dateCnt ? `<div class="meta" style="color:#a8661c">日付不明 ${dateCnt}件</div>` : ""}${needAmt ? `<div class="meta">うち証拠を集める必要あり ${needAmt.toLocaleString()}円</div>` : ""}${noAmt ? `<div class="meta">うち証拠が存在しない ${noAmt.toLocaleString()}円</div>` : ""}</div>
     <div class="card stat"><div class="hint">精算済み 合計</div><div class="num">${settled.toLocaleString()}<small>円</small></div></div>
     <div class="card stat"><div class="hint">会員への聞き取り</div><div class="num">${checked}<small> / ${mem.length}人 確認済み</small></div></div>
   </div>
   <div class="toolbar noprint">
-    <div class="chips">${chip("unpaid", "未入金が残っている会員")}${chip("settled", "精算が終わった会員")}${chip("unchecked", "まだ聞き取りしていない会員")}${chip("needev", "証拠を集める必要がある")}${chip("noev", "証拠が存在しない")}</div>
+    <div class="chips">${chip("unpaid", "未入金が残っている会員")}${chip("settled", "精算が終わった会員")}${chip("fill", "あとで埋める取引（日付不明・金額未確定）")}${chip("unchecked", "まだ聞き取りしていない会員")}${chip("needev", "証拠を集める必要がある")}${chip("noev", "証拠が存在しない")}</div>
     <div style="margin-left:auto;display:flex;gap:8px"><button class="btn gold" onclick="openArrear()">＋ 未入金を追加</button><button class="btn" onclick="exportArrCSV()">CSVで書き出し</button><button class="btn" onclick="window.print()">印刷・PDF</button></div>
   </div>
   ${list.length ? list.map(r => `
     <div class="card arr">
       <div class="dhead"><div><span class="nm" style="font-weight:700;cursor:pointer" onclick="go('detail','${r.m.id}')">${esc(r.m.name)}</span>${r.m.nick ? ` <span class="meta">（${esc(r.m.nick)}）</span>` : ""}
         <span class="tag ${r.m.gainCheck === "has" ? "t-red" : r.m.gainCheck === "none" ? "t-green" : "t-gray"}">聞き取り：${CHECK[r.m.gainCheck || "unchecked"]}</span></div>
-        <div style="margin-left:auto;text-align:right"><div class="hint">未入金</div><b class="red" style="font-size:17px">${r.unpaid.toLocaleString()}円</b>${r.settled ? `<div class="meta">精算済み ${r.settled.toLocaleString()}円</div>` : ""}</div></div>
+        <div style="margin-left:auto;text-align:right"><div class="hint">未入金</div><b class="red" style="font-size:17px">${r.unpaid.toLocaleString()}円</b>${r.open ? `<div class="meta">${r.open}件・${r.qty}個${r.unk ? `（ほかに金額未確定${r.unk}件）` : ""}</div>` : ""}${r.settled ? `<div class="meta">精算済み ${r.settled.toLocaleString()}円</div>` : ""}</div></div>
       ${r.l.length ? `<div style="margin-top:8px">${arrTable(r.l, r.m.id)}</div>` : ""}
       <div class="noprint" style="margin-top:8px;display:flex;gap:6px;flex-wrap:wrap">
         <button class="btn sm" onclick="openArrear('${r.m.id}')">＋ この会員に追加</button>
@@ -583,11 +590,11 @@ function openArrear(memberId, aid) {
     .map(m => `<option value="${m.id}" ${m.id === (memberId || x.memberId) ? "selected" : ""}>${m.salonNo ? esc(m.salonNo) + " " : ""}${esc(m.name)}${m.nick ? "（" + esc(m.nick) + "）" : ""}</option>`).join("");
   modal(`<h3>${aid ? "未入金の編集" : "未入金を追加"}</h3>
     <div class="f"><label>会員 *</label><select id="aMem"><option value="">選択してください</option>${opts}</select></div>
-    <div class="f2"><div class="f"><label>取引日 *</label><input id="aDate" type="date" value="${esc(x.date)}"></div>
+    <div class="f2"><div class="f"><label>取引日（不明なら空欄）</label><input id="aDate" type="date" value="${esc(x.date)}"></div>
     <div class="f"><label>商品名・型番 *</label><input id="aItem" value="${esc(x.item)}"></div></div>
     <div class="f2"><div class="f"><label>個数</label><input id="aQty" type="number" inputmode="numeric" value="${esc(x.qty)}"></div>
     <div class="f"><label>単価（円）</label><input id="aUnit" type="number" inputmode="numeric" value="${esc(x.unitPrice)}"></div></div>
-    <div class="f"><label>金額（円）*　個数×単価で自動計算。違う場合は直接入力</label><input id="aAmt" type="number" inputmode="numeric" value="${esc(x.amount)}"></div>
+    <div class="f"><label>金額（円）　個数×単価で自動計算。違う場合は直接入力。分からなければ空欄</label><input id="aAmt" type="number" inputmode="numeric" value="${esc(x.amount)}"></div>
     <div class="f2"><div class="f"><label>状態</label><select id="aSt">${Object.entries(ARR_ST).map(([k, v]) => `<option value="${k}" ${(x.status || "unpaid") === k ? "selected" : ""}>${v}</option>`).join("")}</select></div>
     <div class="f" id="aSetWrap"><label>精算日</label><input id="aSetDate" type="date" value="${esc(x.settledDate)}"></div></div>
     <div class="f" id="aByWrap"><label>誰が精算したか</label><input id="aBy" value="${esc(x.settledBy)}" placeholder="例：HAK立替、KANETAKA立替、GAINから回収"></div>
@@ -606,9 +613,9 @@ function openArrear(memberId, aid) {
 }
 async function saveArrear(aid, cont) {
   const memberId = $("aMem").value, date = $("aDate").value, item = $("aItem").value.trim(), amt = $("aAmt").value;
-  if (!memberId || !date || !item || amt === "") { alert("会員・取引日・商品名・金額を入力してください"); return; }
+  if (!memberId || !item) { alert("会員と商品名を入力してください"); return; }
   const n = v => v === "" ? null : Number(v), st = $("aSt").value;
-  const data = { memberId, date, item, qty: n($("aQty").value), unitPrice: n($("aUnit").value), amount: Number(amt), status: st,
+  const data = { memberId, date, item, qty: n($("aQty").value), unitPrice: n($("aUnit").value), amount: amt === "" ? null : Number(amt), status: st,
     settledDate: st === "settled" ? $("aSetDate").value : "", settledBy: st === "settled" ? $("aBy").value.trim() : "", note: $("aNote").value.trim(),
     evidence: [...document.querySelectorAll(".aEv:checked")].map(e => e.value), evStatus: $("aEvSt").value, evidenceNote: $("aEvNote").value.trim(), updatedAt: Date.now(), by: auth?.email || "demo" };
   const id = aid || uid();
@@ -625,9 +632,9 @@ function delArrear(aid) {
   confirmBox("この未入金の記録を削除しますか？", async () => { delete state.arrears[aid]; render(); toast("削除しました"); await save("DELETE", `arrears/${aid}`); });
 }
 function exportArrCSV() {
-  const head = ["氏名", "あだ名", "聞き取り", "取引日", "商品", "個数", "単価", "金額", "状態", "精算日", "精算者", "証拠", "証拠の保管場所・補足", "メモ"];
-  const rows = Object.values(state.arrears).map(x => { const m = state.members[x.memberId] || {}; return [m.name, m.nick, CHECK[m.gainCheck || "unchecked"], x.date, x.item, x.qty, x.unitPrice, arrAmt(x), ARR_ST[x.status || "unpaid"], x.settledDate, x.settledBy, evState(x) === "have" ? (x.evidence || []).filter(k => EVID[k]).map(k => EVID[k]).join("・") : evState(x) === "none" ? "存在しない" : evState(x) === "requested" ? "提出を依頼中" : "未収集", x.evidenceNote, x.note]; })
-    .sort((a, b) => String(a[0]).localeCompare(String(b[0]), "ja") || String(a[3]).localeCompare(String(b[3])));
+  const head = ["サロンNo", "氏名", "あだ名", "聞き取り", "取引日", "商品", "個数", "単価", "金額", "状態", "精算日", "精算者", "証拠", "証拠の保管場所・補足", "メモ"];
+  const rows = Object.values(state.arrears).map(x => { const m = state.members[x.memberId] || {}; return [m.salonNo, m.name, m.nick, CHECK[m.gainCheck || "unchecked"], x.date || "日付不明", x.item, x.qty, x.unitPrice, amtUnknown(x) ? "金額未確定" : arrAmt(x), ARR_ST[x.status || "unpaid"], x.settledDate, x.settledBy, evState(x) === "have" ? (x.evidence || []).filter(k => EVID[k]).map(k => EVID[k]).join("・") : evState(x) === "none" ? "存在しない" : evState(x) === "requested" ? "提出を依頼中" : "未収集", x.evidenceNote, x.note]; })
+    .sort((a, b) => String(a[0] || "~").localeCompare(String(b[0] || "~"), "ja", { numeric: true }) || String(a[4]).localeCompare(String(b[4])));
   const csv = [head, ...rows].map(r => r.map(v => `"${String(v ?? "").replace(/"/g, '""')}"`).join(",")).join("\r\n");
   const a = document.createElement("a");
   a.href = URL.createObjectURL(new Blob(["﻿" + csv], { type: "text/csv" }));
