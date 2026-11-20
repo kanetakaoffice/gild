@@ -150,6 +150,26 @@ h3{font-size:15px;margin:0 0 8px}
 .stat .num small{font-size:12px;font-weight:400;color:var(--sub)}
 .red{color:var(--red)}
 .printonly{display:none}
+/* ホーム */
+.hstats{display:grid;grid-template-columns:repeat(5,1fr);gap:12px;margin-bottom:16px}
+.hstat{cursor:pointer;margin:0;padding:14px 16px;transition:border-color .15s}
+.hstat:hover{border-color:var(--gold)}
+.hstat .num{font-size:26px;font-weight:700;line-height:1.3}
+.hstat .num small{font-size:12px;font-weight:400;color:var(--sub);margin-left:2px}
+.hgrid{display:grid;grid-template-columns:1.25fr 1fr;gap:16px;align-items:start}
+.dayh{font-weight:700;font-size:13px;margin:14px 0 2px;padding:4px 0;border-bottom:2px solid var(--gold-soft)}
+.dayh:first-of-type{margin-top:4px}
+.mtime{font-weight:700;font-size:15px;min-width:52px;color:var(--ink);padding-top:1px}
+.carebox{background:var(--red-soft);border-radius:6px;padding:4px 8px;font-size:12px;margin-top:4px}
+.carebox b{color:var(--red);margin-right:4px}
+@media (max-width:1200px){.hstats{grid-template-columns:repeat(3,1fr)}}
+@media (max-width:900px){.hgrid{grid-template-columns:1fr}}
+@media (max-width:560px){.hstats{grid-template-columns:repeat(2,1fr)}}
+/* ページ見出しバー */
+.pbar{display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin:0 0 16px}
+.pbar h1{font-size:19px;margin:0;font-weight:700;letter-spacing:.03em}
+.pbar .pdate{color:var(--sub);font-size:13px}
+.pbar .pact{margin-left:auto;display:flex;gap:8px;flex-wrap:wrap}
 /* PCの広い画面：左側にメニュー */
 @media (min-width:1000px){
   header{position:fixed;top:0;left:0;bottom:0;width:220px;z-index:30}
@@ -166,10 +186,17 @@ h3{font-size:15px;margin:0 0 8px}
   .user button{margin-left:0;padding:8px 10px;text-align:left;font-size:13px;border-color:#444}
   .user button:hover{border-color:var(--gold);color:#fff}
   .demo{margin-left:220px}
-  main{margin-left:220px;max-width:1500px;padding:24px 32px}
+  main{margin-left:220px;max-width:1500px;padding:0 32px 24px}
+  .pbar{background:var(--dark);color:#fff;margin:0 -32px 22px;padding:14px 32px;min-height:62px;position:sticky;top:0;z-index:15}
+  .pbar .pdate{color:#a8a59c}
+  .pbar .btn{background:none;border-color:#555;color:#ddd}
+  .pbar .btn:hover{border-color:var(--gold);color:#fff}
+  .pbar .btn.gold{background:var(--gold);border-color:var(--gold);color:#fff}
+  .pbar .back{color:#bbb;margin:0}
 }
 @media print{
   main{margin-left:0!important}
+  .pbar{display:none!important}
   header,.demo,.noprint,.toast,#modalRoot{display:none!important}
   .printonly{display:block}
   body{background:#fff;font-size:12px}
@@ -452,41 +479,68 @@ function render() {
   if (ui.tab === "arrears") renderArrears();
 }
 
+/* ---------- ページ見出しバー ---------- */
+function pbar(title, actions = "", lead = "") {
+  const d = new Date(), wd = WD[d.getDay()];
+  return `<div class="pbar">${lead}<h1>${title}</h1><span class="pdate hide-sp">${d.getFullYear()}/${d.getMonth() + 1}/${d.getDate()}(${wd})</span><div class="pact">${actions}</div></div>`;
+}
+
 /* ---------- ホーム ---------- */
 function renderHome() {
   const act = membersArr().filter(m => m.status !== "left");
-  const t = todayStr();
-  const upcoming = act.filter(m => m.nextMtg && daysFrom(m.nextMtg) <= 14).sort((a, b) => a.nextMtg.localeCompare(b.nextMtg));
+  const active = act.filter(m => (m.status || "active") === "active");
   const cares = [];
   act.forEach(m => openCare(m.id).forEach(x => cares.push({ m, x })));
   cares.sort((a, b) => (b.x.date || "").localeCompare(a.x.date || ""));
   const k = curYM();
-  const unpaid = act.filter(m => m.status === "active" && monthApplies(m, k) && !isPaid(m.id, k));
-  const idle = act.filter(m => m.status === "active" && !m.nextMtg && (!hasMtg(m.id) || (lastMtg(m.id) && daysFrom(lastMtg(m.id)) <= -CONFIG.idleDays)));
-
+  const unpaid = active.filter(m => monthApplies(m, k) && !isPaid(m.id, k)).sort(byNo);
+  const idle = active.filter(m => !m.nextMtg && (!hasMtg(m.id) || (lastMtg(m.id) && daysFrom(lastMtg(m.id)) <= -CONFIG.idleDays))).sort(byNo);
+  const sched = act.filter(m => m.nextMtg && daysFrom(m.nextMtg) <= 6).sort((a, b) => (a.nextMtg + (a.nextMtgTime || "99")).localeCompare(b.nextMtg + (b.nextMtgTime || "99")));
+  const overdue = sched.filter(m => daysFrom(m.nextMtg) < 0), week = sched.filter(m => daysFrom(m.nextMtg) >= 0);
+  const later = act.filter(m => m.nextMtg && daysFrom(m.nextMtg) > 6).length;
+  const arrAll = Object.values(state.arrears), arrOpen = arrAll.filter(isOpen), arrTotal = arrOpen.reduce((s2, x) => s2 + arrAmt(x), 0);
+  const ex = ui.homeEx || {};
   const nm = m => `<span class="nm" onclick="go('detail','${m.id}')">${esc(m.name)}</span>${m.nick ? ` <span class="meta">（${esc(m.nick)}）</span>` : ""}`;
-
-  $("v-home").innerHTML = `
-  <div class="grid2">
+  const more = (key, n, lim = 5) => n > lim ? `<div style="text-align:center;margin-top:8px"><button class="btn sm" onclick="ui.homeEx={...(ui.homeEx||{}),${key}:${!ex[key]}};renderHome()">${ex[key] ? "閉じる" : `すべて見る（${n}件）`}</button></div>` : "";
+  const cut = (arr, key, lim = 5) => ex[key] ? arr : arr.slice(0, lim);
+  const stat = (label, num, unit, sub, onclick, cls = "") => `<div class="card stat hstat" onclick="${onclick}"><div class="hint">${label}</div><div class="num ${cls}">${num}<small>${unit}</small></div><div class="meta">${sub}</div></div>`;
+  const dayHead = d => { const n = daysFrom(d); return n === 0 ? "今日" : n === 1 ? "明日" : fmtD(d); };
+  const mtgRow = m => {
+    const c = openCare(m.id), last = meetingsOf(m.id)[0];
+    const n = daysFrom(m.nextMtg);
+    const badge = n < 0 ? `<span class="tag t-red">${-n}日過ぎています</span>` : n === 0 ? `<span class="tag t-red">今日</span>` : n === 1 ? `<span class="tag t-orange">明日</span>` : `<span class="tag t-gray">あと${n}日</span>`;
+    return `<div class="row" style="align-items:flex-start"><div class="mtime">${m.nextMtgTime || `<span class="meta" style="font-weight:400">時刻未定</span>`}</div><div class="grow">${nm(m)} ${courseTag(m.course)}
+      <div class="meta">${n < 0 ? fmtD(m.nextMtg) + "の予定　" : ""}前回：${lastLabel(m.id)}${last && last.host ? "（" + esc(last.host) + "）" : ""}</div>
+      ${c.length ? `<div class="carebox"><b>ケア</b> ${esc(c[0].care.length > 70 ? c[0].care.slice(0, 70) + "…" : c[0].care)}${c.length > 1 ? `<span class="meta">　ほか${c.length - 1}件</span>` : ""}</div>` : ""}
+      ${last && last.next ? `<div class="meta">前回の宿題：${esc(last.next.length > 50 ? last.next.slice(0, 50) + "…" : last.next)}</div>` : ""}
+      </div><div style="display:flex;flex-direction:column;gap:6px;align-items:flex-end">${badge}<button class="btn sm" onclick="openMeeting('${m.id}')">記録を追加</button></div></div>`;
+  };
+  // 今週の予定を日ごとにまとめる
+  const days = {}; week.forEach(m => (days[m.nextMtg] = days[m.nextMtg] || []).push(m));
+  $("v-home").innerHTML = pbar("ホーム") + `
+  <div class="hstats">
+    ${stat("在籍会員", active.length, "人", act.length - active.length ? `休会 ${act.length - active.length}人` : "　", "go('members')")}
+    ${stat("今週のミーティング", week.length, "件", overdue.length ? `<span class="red">予定日を過ぎた ${overdue.length}件</span>` : later ? `それ以降の予定 ${later}件` : "　", "document.getElementById('hSched').scrollIntoView({behavior:'smooth'})")}
+    ${stat("未対応のケア事項", cares.length, "件", "　", "document.getElementById('hCare').scrollIntoView({behavior:'smooth'})", cares.length ? "red" : "")}
+    ${stat(`${Number(k.slice(5))}月の月額 未払い`, unpaid.length, "人", "支払い画面へ →", "go('pay')", unpaid.length ? "red" : "")}
+    ${stat("GAIN未入金", arrTotal.toLocaleString(), "円", `${arrOpen.length}件${arrOpen.filter(amtUnknown).length ? `・金額未確定 ${arrOpen.filter(amtUnknown).length}件` : ""}`, "go('arrears')", arrTotal ? "red" : "")}
+  </div>
+  <div class="hgrid">
     <div>
-      <div class="card"><h3>次回ミーティング（2週間以内）<span class="cnt">${upcoming.length}</span></h3>
-        ${upcoming.length ? upcoming.map(m => {
-          const d = daysFrom(m.nextMtg);
-          const badge = d < 0 ? `<span class="tag t-red">${-d}日過ぎています</span>` : d === 0 ? `<span class="tag t-red">今日</span>` : `<span class="tag t-gray">あと${d}日</span>`;
-          const c = openCare(m.id).length;
-          return `<div class="row"><div class="grow">${nm(m)} ${courseTag(m.course)}<div class="meta">${nextLabel(m)}　前回：${lastLabel(m.id)}${c ? `　<span class="tag t-red">要ケア ${c}</span>` : ""}</div></div>${badge}</div>`;
-        }).join("") : `<div class="empty">予定はありません</div>`}
-      </div>
-      <div class="card"><h3>フォローが必要（${CONFIG.idleDays}日以上ミーティングなし・次回未定）<span class="cnt">${idle.length}</span></h3>
-        ${idle.length ? idle.map(m => `<div class="row"><div class="grow">${nm(m)} ${courseTag(m.course)}<div class="meta">前回：${lastLabel(m.id, true)}</div></div><button class="btn sm" onclick="openMeeting('${m.id}')">記録を追加</button></div>`).join("") : `<div class="empty">該当する会員はいません</div>`}
+      <div class="card" id="hSched"><h3>今日・今週のミーティング<span class="cnt">${week.length}</span></h3>
+        ${overdue.length ? `<div class="dayh red">予定日を過ぎています（記録を追加するか、次回MTGを入れ直してください）</div>${overdue.map(mtgRow).join("")}` : ""}
+        ${Object.keys(days).length ? Object.entries(days).map(([d, ms]) => `<div class="dayh">${daysFrom(d) <= 1 ? dayHead(d) + `<span class="meta">　${fmtDY(d)}</span>` : fmtDY(d)}</div>${ms.map(mtgRow).join("")}`).join("") : (overdue.length ? "" : `<div class="empty">今週の予定はありません${later ? `（それ以降の予定 ${later}件）` : ""}</div>`)}
       </div>
     </div>
     <div>
-      <div class="card"><h3>未対応のケア事項<span class="cnt">${cares.length}</span></h3>
-        ${cares.length ? cares.map(({ m, x }) => `<div class="row"><div class="grow">${nm(m)}<div class="meta">${fmtD(x.date)} のミーティング</div><div style="white-space:pre-wrap;font-size:13px;margin-top:2px">${esc(x.care)}</div></div><button class="btn sm" onclick="toggleCare('${x.id}')">対応済み</button></div>`).join("") : `<div class="empty">未対応のケア事項はありません</div>`}
+      <div class="card" id="hCare"><h3>未対応のケア事項<span class="cnt">${cares.length}</span></h3>
+        ${cares.length ? cut(cares, "care").map(({ m, x }) => `<div class="row"><div class="grow">${nm(m)}<div class="meta">${x.date ? fmtD(x.date) : "日付不明"} のミーティング</div><div style="white-space:pre-wrap;font-size:13px;margin-top:2px">${esc(x.care)}</div></div><button class="btn sm" onclick="toggleCare('${x.id}')">対応済み</button></div>`).join("") + more("care", cares.length) : `<div class="empty">未対応のケア事項はありません</div>`}
+      </div>
+      <div class="card"><h3>フォローが必要<span class="cnt">${idle.length}</span><span class="meta" style="font-weight:400;margin-left:8px">${CONFIG.idleDays}日以上ミーティングなし・次回未定</span></h3>
+        ${idle.length ? cut(idle, "idle").map(m => `<div class="row"><div class="grow">${nm(m)} ${courseTag(m.course)}<div class="meta">前回：${lastLabel(m.id, true)}</div></div><button class="btn sm" onclick="openMember('${m.id}')">次回MTGを入れる</button></div>`).join("") + more("idle", idle.length) : `<div class="empty">該当する会員はいません</div>`}
       </div>
       <div class="card"><h3>${Number(k.slice(5))}月分の月額 未払い<span class="cnt">${unpaid.length}</span></h3>
-        ${unpaid.length ? unpaid.map(m => `<div class="row"><div class="grow">${nm(m)}<div class="meta">月額 ${yen(m.fee)}</div></div><button class="btn sm" onclick="togglePay('${m.id}','${k}')">支払い済みにする</button></div>`).join("") : `<div class="empty">全員支払い済みです</div>`}
+        ${unpaid.length ? cut(unpaid, "unpaid").map(m => `<div class="row"><div class="grow">${nm(m)}<div class="meta">月額 ${yen(m.fee)}</div></div><button class="btn sm" onclick="togglePay('${m.id}','${k}')">支払い済みにする</button></div>`).join("") + more("unpaid", unpaid.length) : `<div class="empty">全員支払い済みです</div>`}
       </div>
     </div>
   </div>`;
@@ -502,13 +556,9 @@ function renderMembers() {
   list.sort(memSort);
   const k = curYM();
   const chip = (key, val, label) => `<button class="chip ${ui[key] === val ? "on" : ""}" onclick="ui.${key}='${val}';renderMembers()">${label}</button>`;
-  $("v-members").innerHTML = `
+  $("v-members").innerHTML = pbar("会員一覧", `<button class="btn hide-sp" onclick="exportCSV()">CSVで書き出し</button><button class="btn" onclick="openBulk()">まとめて登録</button><button class="btn" onclick="openSched()">MTG予定をまとめて登録</button><button class="btn gold" onclick="openMember()">＋ 会員を追加</button>`) + `
   <div class="toolbar">
     <input type="search" placeholder="名前・あだ名・サロンNo・メールで検索" value="${esc(ui.search)}" oninput="ui.search=this.value;renderMembersTable()">
-    <button class="btn gold" onclick="openMember()">＋ 会員を追加</button>
-    <button class="btn" onclick="openBulk()">まとめて登録</button>
-    <button class="btn" onclick="openSched()">MTG予定をまとめて登録</button>
-    <button class="btn hide-sp" onclick="exportCSV()">CSVで書き出し</button>
   </div>
   <div class="toolbar">
     <div class="chips">${chip("course", "all", "すべてのコース")}${chip("course", "store", "店舗")}${chip("course", "online", "電脳")}${chip("course", "both", "両方")}${chip("course", "none", "未設定")}</div>
@@ -555,8 +605,7 @@ function renderDetail() {
   // 直近6か月の支払い
   const months = []; const d = new Date(); d.setDate(1);
   for (let i = 5; i >= 0; i--) { const x = new Date(d.getFullYear(), d.getMonth() - i, 1); months.push(`${x.getFullYear()}-${String(x.getMonth() + 1).padStart(2, "0")}`); }
-  $("v-detail").innerHTML = `
-  <button class="back" onclick="go('members')">← 会員一覧へ</button>
+  $("v-detail").innerHTML = pbar("会員詳細", "", `<button class="back" onclick="go('members')">← 会員一覧へ</button>`) + `
   <div class="card">
     <div class="dhead">
       <div><div class="big">${esc(m.name)} ${m.status && m.status !== "active" ? `<span class="tag t-gray">${STATUS[m.status]}</span>` : ""}</div>
@@ -605,7 +654,7 @@ function renderPay() {
     .sort(byNo);
   const k = curYM();
   const unpaidCnt = months.map(mk => list.filter(m => monthApplies(m, mk) && !isPaid(m.id, mk) && mk <= k).length);
-  $("v-pay").innerHTML = `
+  $("v-pay").innerHTML = pbar("支払い") + `
   <div class="toolbar">
     <button class="btn" onclick="ui.payYear--;renderPay()">◀</button><b>${y}年</b><button class="btn" onclick="ui.payYear++;renderPay()">▶</button>
     <span class="hint" style="margin-left:8px">マスをタップすると「済／未」が切り替わります。入会前・退会後の月は対象外（−）です。</span>
@@ -662,7 +711,7 @@ function renderArrears() {
   const openCnt = all.filter(isOpen).length, qtyAll = openQty(all);
   list.sort((a, b) => b.unpaid - a.unpaid || b.open - a.open || byNo(a.m, b.m));
   const chip = (v, label) => `<button class="chip ${f === v ? "on" : ""}" onclick="ui.arrFilter='${v}';renderArrears()">${label}</button>`;
-  $("v-arrears").innerHTML = `
+  $("v-arrears").innerHTML = pbar("GAIN未入金", `<button class="btn" onclick="exportArrCSV()">CSVで書き出し</button><button class="btn" onclick="window.print()">印刷・PDF</button><button class="btn gold" onclick="openArrear()">＋ 未入金を追加</button>`) + `
   <div class="printonly"><h2>GILD　GAIN代表による会員への未入金一覧（${fmtDY(todayStr())} 時点）</h2></div>
   <div class="grid3">
     <div class="card stat"><div class="hint">未入金 合計</div><div class="num red">${total.toLocaleString()}<small>円</small></div><div class="meta">${openCnt}件・${qtyAll}個</div>${unkCnt ? `<div class="meta" style="color:#a8661c">ほかに金額未確定 ${unkCnt}件</div>` : ""}${dateCnt ? `<div class="meta" style="color:#a8661c">日付不明 ${dateCnt}件</div>` : ""}${needAmt ? `<div class="meta">うち証拠を集める必要あり ${needAmt.toLocaleString()}円</div>` : ""}${noAmt ? `<div class="meta">うち証拠が存在しない ${noAmt.toLocaleString()}円</div>` : ""}</div>
@@ -671,7 +720,6 @@ function renderArrears() {
   </div>
   <div class="toolbar noprint">
     <div class="chips">${chip("unpaid", "未入金が残っている会員")}${chip("settled", "精算が終わった会員")}${chip("fill", "あとで埋める取引（日付不明・金額未確定）")}${chip("unchecked", "まだ聞き取りしていない会員")}${chip("needev", "証拠を集める必要がある")}${chip("noev", "証拠が存在しない")}</div>
-    <div style="margin-left:auto;display:flex;gap:8px"><button class="btn gold" onclick="openArrear()">＋ 未入金を追加</button><button class="btn" onclick="exportArrCSV()">CSVで書き出し</button><button class="btn" onclick="window.print()">印刷・PDF</button></div>
   </div>
   ${list.length ? list.map(r => `
     <div class="card arr">
