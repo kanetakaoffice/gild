@@ -1,0 +1,796 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>GILD 会員管理</title>
+<style>
+:root{
+  --bg:#f6f5f1; --card:#ffffff; --ink:#1d1d1b; --sub:#6b6a66; --line:#e4e1d8;
+  --gold:#a8843f; --gold-soft:#f3ecdd; --dark:#1d1d1b;
+  --red:#b54a3c; --red-soft:#f8e6e2; --green:#3f7d5a; --green-soft:#e3f0e8;
+  --blue:#3d6a8c; --blue-soft:#e3edf4;
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font-family:-apple-system,BlinkMacSystemFont,"Hiragino Sans","Hiragino Kaku Gothic ProN","Noto Sans JP",sans-serif;font-size:15px;line-height:1.6}
+button{font:inherit;cursor:pointer}
+input,select,textarea{font:inherit;color:inherit}
+.hidden{display:none!important}
+
+/* header */
+header{background:var(--dark);color:#fff;position:sticky;top:0;z-index:20}
+.hd{max-width:1100px;margin:0 auto;display:flex;align-items:center;gap:16px;padding:12px 18px}
+.logo{font-weight:700;letter-spacing:.18em;font-size:18px}
+.logo span{color:var(--gold);}
+.logo small{font-weight:400;letter-spacing:.05em;font-size:12px;color:#bbb;margin-left:8px}
+nav{display:flex;gap:4px;margin-left:auto}
+nav button{background:none;border:0;color:#ccc;padding:6px 12px;border-radius:6px}
+nav button.on{background:#333;color:#fff}
+.user{font-size:12px;color:#999}
+.user button{background:none;border:1px solid #555;color:#ccc;border-radius:5px;padding:2px 8px;margin-left:6px;font-size:12px}
+.demo{background:var(--gold);color:#fff;text-align:center;font-size:12px;padding:3px}
+
+main{max-width:1100px;margin:0 auto;padding:18px}
+h2{font-size:17px;margin:0 0 10px}
+h3{font-size:15px;margin:0 0 8px}
+.grid2{display:grid;grid-template-columns:1fr 1fr;gap:16px}
+.card{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:16px;margin-bottom:16px}
+.card h3 .cnt{background:var(--gold-soft);color:var(--gold);border-radius:10px;padding:0 8px;font-size:12px;margin-left:6px}
+.empty{color:var(--sub);font-size:13px;padding:6px 0}
+.row{display:flex;align-items:center;gap:10px;padding:8px 0;border-top:1px solid var(--line)}
+.row:first-of-type{border-top:0}
+.row .nm{font-weight:600;cursor:pointer}
+.row .nm:hover{color:var(--gold)}
+.row .meta{color:var(--sub);font-size:12px}
+.row .grow{flex:1;min-width:0}
+.tag{display:inline-block;font-size:11px;border-radius:4px;padding:0 6px;line-height:18px;white-space:nowrap}
+.t-store{background:var(--blue-soft);color:var(--blue)}
+.t-online{background:var(--green-soft);color:var(--green)}
+.t-both{background:var(--gold-soft);color:var(--gold)}
+.t-red{background:var(--red-soft);color:var(--red)}
+.t-gray{background:#eee;color:#777}
+.t-green{background:var(--green-soft);color:var(--green)}
+.t-orange{background:#fbefdc;color:#a8661c}
+
+.btn{border:1px solid var(--line);background:#fff;border-radius:7px;padding:6px 12px;font-size:13px}
+.btn:hover{border-color:var(--gold)}
+.btn.pri{background:var(--dark);color:#fff;border-color:var(--dark)}
+.btn.gold{background:var(--gold);color:#fff;border-color:var(--gold)}
+.btn.sm{padding:2px 8px;font-size:12px}
+.btn.danger{color:var(--red)}
+.toolbar{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-bottom:12px}
+.toolbar input[type=search]{flex:1;min-width:180px;padding:7px 10px;border:1px solid var(--line);border-radius:7px;background:#fff}
+.chips{display:flex;gap:4px;flex-wrap:wrap}
+.chip{border:1px solid var(--line);background:#fff;border-radius:14px;padding:3px 11px;font-size:12px}
+.chip.on{background:var(--dark);color:#fff;border-color:var(--dark)}
+
+/* table */
+.tbl{width:100%;border-collapse:collapse;background:#fff;border:1px solid var(--line);border-radius:10px;overflow:hidden}
+.tbl th,.tbl td{padding:9px 10px;border-bottom:1px solid var(--line);text-align:left;font-size:13px;white-space:nowrap}
+.tbl th{background:#faf9f5;color:var(--sub);font-weight:500;font-size:12px}
+.tbl tr.click{cursor:pointer}
+.tbl tr.click:hover td{background:#fbf8f1}
+.tbl tr.left td{color:#aaa}
+.scroll{overflow-x:auto;border-radius:10px}
+
+/* payment grid */
+.pay th,.pay td{text-align:center;padding:7px 6px}
+.pay td.nmc,.pay th.nmc{text-align:left;position:sticky;left:0;background:#fff;z-index:1}
+.pay th.nmc{background:#faf9f5}
+.pc{width:34px;height:26px;border-radius:5px;border:1px solid var(--line);background:#fff;font-size:12px}
+.pc.paid{background:var(--green);border-color:var(--green);color:#fff}
+.pc.unpaid{background:var(--red-soft);border-color:#ebc6bf;color:var(--red)}
+.pc.na{background:#f1f0ec;border-color:#f1f0ec;color:#ccc;cursor:default}
+
+/* detail */
+.back{background:none;border:0;color:var(--sub);padding:0;margin-bottom:10px}
+.dhead{display:flex;align-items:flex-start;gap:12px;flex-wrap:wrap}
+.dhead .big{font-size:20px;font-weight:700}
+.dhead .nick{color:var(--sub)}
+.kv{display:grid;grid-template-columns:110px 1fr;gap:6px 12px;font-size:13px;margin-top:10px}
+.kv dt{color:var(--sub)}
+.kv dd{margin:0}
+.strip{display:flex;gap:6px;flex-wrap:wrap;margin-top:6px}
+.strip .m{text-align:center;font-size:11px;color:var(--sub)}
+.mtg{border:1px solid var(--line);border-radius:9px;padding:12px 14px;margin-bottom:10px;background:#fff}
+.mtg .top{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+.mtg .dt{font-weight:600}
+.mtg .lbl{font-size:11px;color:var(--sub);margin-top:8px}
+.mtg .care{background:var(--red-soft);border-radius:6px;padding:6px 10px;white-space:pre-wrap;font-size:13px}
+.mtg .care.done{background:#f1f0ec;color:#888}
+.mtg .nxt{background:var(--blue-soft);border-radius:6px;padding:6px 10px;white-space:pre-wrap;font-size:13px}
+.mtg details{margin-top:8px}
+.mtg summary{font-size:12px;color:var(--sub);cursor:pointer}
+.mtg pre{white-space:pre-wrap;font-family:inherit;font-size:13px;background:#faf9f5;border-radius:6px;padding:8px 10px;margin:6px 0 0}
+.mtg .acts{margin-left:auto;display:flex;gap:6px}
+
+/* modal */
+.ov{position:fixed;inset:0;background:rgba(0,0,0,.4);z-index:50;display:flex;align-items:flex-start;justify-content:center;padding:40px 12px;overflow-y:auto}
+.modal{background:#fff;border-radius:12px;width:100%;max-width:560px;padding:20px}
+.modal h3{font-size:16px;margin-bottom:14px}
+.f{margin-bottom:12px}
+.f label{display:block;font-size:12px;color:var(--sub);margin-bottom:3px}
+.f input,.f select,.f textarea{width:100%;padding:8px 10px;border:1px solid var(--line);border-radius:7px;background:#fff}
+.f textarea{min-height:80px;resize:vertical}
+.f2{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.chk{display:flex;align-items:center;gap:6px;font-size:14px}
+.chk input{width:auto}
+.mact{display:flex;gap:8px;justify-content:flex-end;margin-top:14px}
+.hint{font-size:12px;color:var(--sub)}
+
+/* login */
+.login{max-width:360px;margin:12vh auto;background:#fff;border:1px solid var(--line);border-radius:12px;padding:28px}
+.login .logo{color:var(--ink);text-align:center;margin-bottom:18px;font-size:22px}
+.err{color:var(--red);font-size:13px;min-height:20px}
+.toast{position:fixed;bottom:20px;left:50%;transform:translateX(-50%);background:var(--dark);color:#fff;padding:8px 18px;border-radius:20px;font-size:13px;z-index:60;opacity:0;transition:opacity .2s;pointer-events:none}
+.toast.show{opacity:1}
+
+.grid3{display:grid;grid-template-columns:repeat(3,1fr);gap:12px}
+.stat .num{font-size:24px;font-weight:700}
+.stat .num small{font-size:12px;font-weight:400;color:var(--sub)}
+.red{color:var(--red)}
+.printonly{display:none}
+@media print{
+  header,.demo,.noprint,.toast,#modalRoot{display:none!important}
+  .printonly{display:block}
+  body{background:#fff;font-size:12px}
+  .card{break-inside:avoid;border-color:#ccc}
+  main{max-width:none;padding:0}
+}
+@media (max-width:760px){
+  .grid3{grid-template-columns:1fr}
+  .grid2{grid-template-columns:1fr}
+  .hd{flex-wrap:wrap;gap:8px;padding:10px 12px}
+  nav{margin-left:0;order:3;width:100%}
+  nav button{flex:1;white-space:nowrap;padding:6px 2px;font-size:14px}
+  .user{margin-left:auto}
+  main{padding:12px}
+  .f2{grid-template-columns:1fr}
+  .hide-sp{display:none}
+}
+</style>
+</head>
+<body>
+
+<!-- ログイン -->
+<div id="loginView" class="hidden">
+  <div class="login">
+    <div class="logo">G<span>I</span>LD <small style="display:block;letter-spacing:.05em;font-size:12px;color:#888;font-weight:400">会員管理</small></div>
+    <div class="f"><label>メールアドレス</label><input id="lgEmail" type="email" autocomplete="username"></div>
+    <div class="f"><label>パスワード</label><input id="lgPass" type="password" autocomplete="current-password"></div>
+    <div class="err" id="lgErr"></div>
+    <button class="btn pri" style="width:100%;padding:10px" onclick="doLogin()">ログイン</button>
+  </div>
+</div>
+
+<!-- アプリ本体 -->
+<div id="appView" class="hidden">
+  <div id="demoBar" class="demo hidden">デモモード：入力した内容は保存されません（Firebaseの設定をすると保存されます）</div>
+  <header>
+    <div class="hd">
+      <div class="logo">G<span>I</span>LD<small>会員管理</small></div>
+      <nav>
+        <button data-tab="home" class="on" onclick="go('home')">ホーム</button>
+        <button data-tab="members" onclick="go('members')">会員</button>
+        <button data-tab="pay" onclick="go('pay')">支払い</button>
+        <button data-tab="arrears" onclick="go('arrears')">GAIN未入金</button>
+      </nav>
+      <div class="user"><span id="userEmail"></span><button onclick="logout()">ログアウト</button></div>
+    </div>
+  </header>
+  <main>
+    <section id="v-home"></section>
+    <section id="v-members" class="hidden"></section>
+    <section id="v-detail" class="hidden"></section>
+    <section id="v-pay" class="hidden"></section>
+    <section id="v-arrears" class="hidden"></section>
+  </main>
+</div>
+
+<div id="modalRoot"></div>
+<div class="toast" id="toast"></div>
+
+<script>
+/* =========================================================
+   設定：Firebaseの設定をここに入れると保存されるようになります。
+   空のままだと「デモモード」（保存されない）で動きます。
+   ========================================================= */
+const CONFIG = {
+  apiKey: "AIzaSyBzszVhMqVUbexsMmqUBSFVd09H1FtYMWY",
+  databaseURL: "https://gild-members-default-rtdb.asia-southeast1.firebasedatabase.app",
+  allowedEmails: [   // ログインできるメールアドレス（代表2人は決まったらここに追加）
+    "hinanzel27@icloud.com",
+  ],
+  hosts: ["KANETAKA代表", "HAK代表"], // ミーティング担当者の選択肢
+  idleDays: 45      // この日数以上ミーティングしていない会員を「フォローが必要」に表示
+};
+
+const DEMO = !CONFIG.apiKey || !CONFIG.databaseURL;
+const COURSES = { store: "店舗", online: "電脳", both: "店舗・電脳" };
+const STATUS = { active: "在籍", paused: "休会", left: "退会" };
+
+let state = { members: {}, meetings: {}, payments: {}, arrears: {} };
+const CHECK = { unchecked: "未確認", has: "未入金あり", none: "未入金なし" };
+const ARR_ST = { unpaid: "未入金", settled: "精算済み" };
+const EVID = { line: "LINE", mail: "メール", slip: "納品書・伝票", bank: "振込・取引明細", photo: "写真・スクショ", other: "その他" };
+const EV_ST = { pending: "まだ集めていない", requested: "会員に提出を依頼中", none: "存在しない（口頭のみ等）" };
+const hasEvid = x => (x.evidence || []).some(k => EVID[k]);
+// 証拠の状況：have=あり / pending=未収集 / requested=依頼中 / none=存在しない
+const evState = x => hasEvid(x) ? "have" : ((x.evidence || []).includes("verbal") ? "none" : (x.evStatus || "pending"));
+const needEv = x => x.status !== "settled" && ["pending", "requested"].includes(evState(x));
+const noEv = x => x.status !== "settled" && evState(x) === "none";
+function evCell(x) {
+  const s = evState(x);
+  const tags = s === "have" ? (x.evidence || []).filter(k => EVID[k]).map(k => `<span class="tag t-green">${EVID[k]}</span>`).join(" ")
+    : s === "none" ? `<span class="tag t-red">証拠なし（口頭のみ等）</span>`
+    : x.status === "settled" ? `<span class="tag t-gray">—</span>`
+    : s === "requested" ? `<span class="tag t-orange">提出を依頼中</span>` : `<span class="tag t-orange">未収集</span>`;
+  return tags + (x.evidenceNote ? `<div class="meta">${esc(x.evidenceNote)}</div>` : "");
+}
+let auth = null;
+let ui = { tab: "home", search: "", course: "all", status: "active", detailId: null, payYear: new Date().getFullYear() };
+
+/* ---------- 共通 ---------- */
+const $ = id => document.getElementById(id);
+const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+const todayStr = () => new Date().toLocaleDateString("sv-SE");
+const ym = d => d.slice(0, 7);
+const curYM = () => ym(todayStr());
+const uid = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
+const WD = ["日", "月", "火", "水", "木", "金", "土"];
+function fmtD(s) { if (!s) return "—"; const d = new Date(s + "T00:00:00"); return `${d.getMonth() + 1}/${d.getDate()}(${WD[d.getDay()]})`; }
+function fmtDY(s) { if (!s) return "—"; const d = new Date(s + "T00:00:00"); return `${d.getFullYear()}/${d.getMonth() + 1}/${d.getDate()}(${WD[d.getDay()]})`; }
+function daysFrom(s) { return Math.round((new Date(s + "T00:00:00") - new Date(todayStr() + "T00:00:00")) / 86400000); }
+function toast(msg) { const t = $("toast"); t.textContent = msg; t.classList.add("show"); clearTimeout(t._t); t._t = setTimeout(() => t.classList.remove("show"), 1800); }
+function courseTag(c) { return `<span class="tag t-${c || "gray"}">${esc(COURSES[c] || "未設定")}</span>`; }
+function yen(n) { return n || n === 0 ? Number(n).toLocaleString() + "円" : "—"; }
+
+/* ---------- 認証（Firebase REST） ---------- */
+async function doLogin() {
+  const email = $("lgEmail").value.trim(), password = $("lgPass").value;
+  $("lgErr").textContent = "";
+  if (CONFIG.allowedEmails.length && !CONFIG.allowedEmails.includes(email)) { $("lgErr").textContent = "このメールアドレスは利用できません"; return; }
+  try {
+    const r = await fetch(`https://identitytoolkit.googleapis.com/v1/accounts:signInWithPassword?key=${CONFIG.apiKey}`, {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ email, password, returnSecureToken: true })
+    });
+    const j = await r.json();
+    if (!r.ok) throw new Error(j.error?.message || "error");
+    auth = { email: j.email, idToken: j.idToken, refreshToken: j.refreshToken, exp: Date.now() + (Number(j.expiresIn) - 60) * 1000 };
+    sessionStorage.setItem("gildAuth", JSON.stringify(auth));
+    await startApp();
+  } catch (e) {
+    $("lgErr").textContent = "ログインできませんでした（メールアドレスまたはパスワードを確認してください）";
+  }
+}
+async function token() {
+  if (auth && Date.now() < auth.exp) return auth.idToken;
+  const r = await fetch(`https://securetoken.googleapis.com/v1/token?key=${CONFIG.apiKey}`, {
+    method: "POST", headers: { "Content-Type": "application/x-www-form-urlencoded" },
+    body: `grant_type=refresh_token&refresh_token=${encodeURIComponent(auth.refreshToken)}`
+  });
+  const j = await r.json();
+  if (!r.ok) { logout(); throw new Error("session expired"); }
+  auth.idToken = j.id_token; auth.refreshToken = j.refresh_token; auth.exp = Date.now() + (Number(j.expires_in) - 60) * 1000;
+  sessionStorage.setItem("gildAuth", JSON.stringify(auth));
+  return auth.idToken;
+}
+function logout() {
+  sessionStorage.removeItem("gildAuth"); auth = null;
+  if (DEMO) { location.reload(); return; }
+  $("appView").classList.add("hidden"); $("loginView").classList.remove("hidden");
+}
+
+/* ---------- DB（Firebase Realtime Database REST） ---------- */
+async function db(method, path, body) {
+  if (DEMO) return null;
+  const url = `${CONFIG.databaseURL.replace(/\/$/, "")}/gild/${path}.json?auth=${await token()}`;
+  const r = await fetch(url, { method, headers: { "Content-Type": "application/json" }, body: body === undefined ? undefined : JSON.stringify(body) });
+  if (!r.ok) throw new Error(`DB ${r.status}`);
+  return r.json();
+}
+async function save(method, path, body) {
+  try { await db(method, path, body); }
+  catch (e) { alert("保存に失敗しました。通信状況を確認して、もう一度お試しください。\n" + e.message); await loadAll(); render(); }
+}
+async function loadAll() {
+  if (DEMO) return;
+  const d = await db("GET", "") || {};
+  state.members = d.members || {}; state.meetings = d.meetings || {}; state.payments = d.payments || {}; state.arrears = d.arrears || {};
+}
+
+/* ---------- 計算 ---------- */
+const membersArr = () => Object.entries(state.members).map(([id, m]) => ({ id, ...m }));
+const meetingsOf = id => Object.entries(state.meetings).filter(([, x]) => x.memberId === id).map(([mid, x]) => ({ id: mid, ...x })).sort((a, b) => (b.date || "").localeCompare(a.date || ""));
+const lastMtg = id => meetingsOf(id)[0]?.date || "";
+const openCare = id => meetingsOf(id).filter(x => x.care && !x.careDone);
+const isPaid = (id, k) => !!state.payments[id]?.[k];
+function monthApplies(m, k) {
+  // 入会月以降で、退会していない月だけ支払い対象にする
+  if (m.joinDate && k < ym(m.joinDate)) return false;
+  if (m.status === "left" && m.leftDate && k > ym(m.leftDate)) return false;
+  if (m.status === "left" && !m.leftDate) return false;
+  return true;
+}
+
+/* ---------- 画面切り替え ---------- */
+function go(tab, id) {
+  ui.tab = tab; if (id) ui.detailId = id;
+  document.querySelectorAll("nav button").forEach(b => b.classList.toggle("on", b.dataset.tab === (tab === "detail" ? "members" : tab)));
+  ["home", "members", "detail", "pay", "arrears"].forEach(t => $("v-" + t).classList.toggle("hidden", t !== tab));
+  render(); window.scrollTo(0, 0);
+}
+function render() {
+  if (ui.tab === "home") renderHome();
+  if (ui.tab === "members") renderMembers();
+  if (ui.tab === "detail") renderDetail();
+  if (ui.tab === "pay") renderPay();
+  if (ui.tab === "arrears") renderArrears();
+}
+
+/* ---------- ホーム ---------- */
+function renderHome() {
+  const act = membersArr().filter(m => m.status !== "left");
+  const t = todayStr();
+  const upcoming = act.filter(m => m.nextMtg && daysFrom(m.nextMtg) <= 14).sort((a, b) => a.nextMtg.localeCompare(b.nextMtg));
+  const cares = [];
+  act.forEach(m => openCare(m.id).forEach(x => cares.push({ m, x })));
+  cares.sort((a, b) => (b.x.date || "").localeCompare(a.x.date || ""));
+  const k = curYM();
+  const unpaid = act.filter(m => m.status === "active" && monthApplies(m, k) && !isPaid(m.id, k));
+  const idle = act.filter(m => m.status === "active" && !m.nextMtg && (!lastMtg(m.id) || daysFrom(lastMtg(m.id)) <= -CONFIG.idleDays));
+
+  const nm = m => `<span class="nm" onclick="go('detail','${m.id}')">${esc(m.name)}</span>${m.nick ? ` <span class="meta">（${esc(m.nick)}）</span>` : ""}`;
+
+  $("v-home").innerHTML = `
+  <div class="grid2">
+    <div>
+      <div class="card"><h3>次回ミーティング（2週間以内）<span class="cnt">${upcoming.length}</span></h3>
+        ${upcoming.length ? upcoming.map(m => {
+          const d = daysFrom(m.nextMtg);
+          const badge = d < 0 ? `<span class="tag t-red">${-d}日過ぎています</span>` : d === 0 ? `<span class="tag t-red">今日</span>` : `<span class="tag t-gray">あと${d}日</span>`;
+          const c = openCare(m.id).length;
+          return `<div class="row"><div class="grow">${nm(m)} ${courseTag(m.course)}<div class="meta">${fmtD(m.nextMtg)}　前回：${fmtD(lastMtg(m.id))}${c ? `　<span class="tag t-red">要ケア ${c}</span>` : ""}</div></div>${badge}</div>`;
+        }).join("") : `<div class="empty">予定はありません</div>`}
+      </div>
+      <div class="card"><h3>フォローが必要（${CONFIG.idleDays}日以上ミーティングなし・次回未定）<span class="cnt">${idle.length}</span></h3>
+        ${idle.length ? idle.map(m => `<div class="row"><div class="grow">${nm(m)} ${courseTag(m.course)}<div class="meta">前回：${lastMtg(m.id) ? fmtDY(lastMtg(m.id)) : "記録なし"}</div></div><button class="btn sm" onclick="openMeeting('${m.id}')">記録を追加</button></div>`).join("") : `<div class="empty">該当する会員はいません</div>`}
+      </div>
+    </div>
+    <div>
+      <div class="card"><h3>未対応のケア事項<span class="cnt">${cares.length}</span></h3>
+        ${cares.length ? cares.map(({ m, x }) => `<div class="row"><div class="grow">${nm(m)}<div class="meta">${fmtD(x.date)} のミーティング</div><div style="white-space:pre-wrap;font-size:13px;margin-top:2px">${esc(x.care)}</div></div><button class="btn sm" onclick="toggleCare('${x.id}')">対応済み</button></div>`).join("") : `<div class="empty">未対応のケア事項はありません</div>`}
+      </div>
+      <div class="card"><h3>${Number(k.slice(5))}月分の月額 未払い<span class="cnt">${unpaid.length}</span></h3>
+        ${unpaid.length ? unpaid.map(m => `<div class="row"><div class="grow">${nm(m)}<div class="meta">月額 ${yen(m.fee)}</div></div><button class="btn sm" onclick="togglePay('${m.id}','${k}')">支払い済みにする</button></div>`).join("") : `<div class="empty">全員支払い済みです</div>`}
+      </div>
+    </div>
+  </div>`;
+}
+
+/* ---------- 会員一覧 ---------- */
+function renderMembers() {
+  let list = membersArr();
+  if (ui.status !== "all") list = list.filter(m => (m.status || "active") === ui.status);
+  if (ui.course !== "all") list = list.filter(m => m.course === ui.course || (ui.course !== "both" && m.course === "both"));
+  const q = ui.search.trim().toLowerCase();
+  if (q) list = list.filter(m => [m.name, m.nick, m.kana, m.memo].some(v => (v || "").toLowerCase().includes(q)));
+  list.sort((a, b) => (a.kana || a.name || "").localeCompare(b.kana || b.name || "", "ja"));
+  const k = curYM();
+  const chip = (key, val, label) => `<button class="chip ${ui[key] === val ? "on" : ""}" onclick="ui.${key}='${val}';renderMembers()">${label}</button>`;
+  $("v-members").innerHTML = `
+  <div class="toolbar">
+    <input type="search" placeholder="名前・あだ名で検索" value="${esc(ui.search)}" oninput="ui.search=this.value;renderMembersTable()">
+    <button class="btn gold" onclick="openMember()">＋ 会員を追加</button>
+    <button class="btn" onclick="openBulk()">まとめて登録</button>
+    <button class="btn hide-sp" onclick="exportCSV()">CSVで書き出し</button>
+  </div>
+  <div class="toolbar">
+    <div class="chips">${chip("course", "all", "すべてのコース")}${chip("course", "store", "店舗")}${chip("course", "online", "電脳")}${chip("course", "both", "両方")}</div>
+    <div class="chips" style="margin-left:auto">${chip("status", "active", "在籍")}${chip("status", "paused", "休会")}${chip("status", "left", "退会")}${chip("status", "all", "すべて")}</div>
+  </div>
+  <div id="memTable"></div>`;
+  renderMembersTable(list);
+}
+function renderMembersTable(list) {
+  if (!list) { // 検索入力時：フォーカスを保ったまま表だけ更新
+    let l = membersArr();
+    if (ui.status !== "all") l = l.filter(m => (m.status || "active") === ui.status);
+    if (ui.course !== "all") l = l.filter(m => m.course === ui.course || (ui.course !== "both" && m.course === "both"));
+    const q = ui.search.trim().toLowerCase();
+    if (q) l = l.filter(m => [m.name, m.nick, m.kana, m.memo].some(v => (v || "").toLowerCase().includes(q)));
+    l.sort((a, b) => (a.kana || a.name || "").localeCompare(b.kana || b.name || "", "ja"));
+    list = l;
+  }
+  const k = curYM();
+  $("memTable").innerHTML = list.length ? `
+  <div class="scroll"><table class="tbl">
+    <tr><th>氏名</th><th>あだ名</th><th>コース</th><th>次回MTG</th><th class="hide-sp">前回MTG</th><th>今月</th><th>ケア</th></tr>
+    ${list.map(m => {
+      const c = openCare(m.id).length;
+      const pay = !monthApplies(m, k) ? `<span class="tag t-gray">対象外</span>` : isPaid(m.id, k) ? `<span class="tag t-green">済</span>` : `<span class="tag t-red">未</span>`;
+      return `<tr class="click ${m.status === "left" ? "left" : ""}" onclick="go('detail','${m.id}')">
+        <td><b>${esc(m.name)}</b>${m.status && m.status !== "active" ? ` <span class="tag t-gray">${STATUS[m.status]}</span>` : ""}</td>
+        <td>${esc(m.nick || "")}</td><td>${courseTag(m.course)}</td>
+        <td>${fmtD(m.nextMtg)}</td><td class="hide-sp">${fmtD(lastMtg(m.id))}</td>
+        <td>${pay}</td><td>${c ? `<span class="tag t-red">${c}件</span>` : ""}</td></tr>`;
+    }).join("")}
+  </table></div>
+  <div class="hint" style="margin-top:6px">${list.length}人</div>` : `<div class="card empty">該当する会員はいません</div>`;
+}
+
+/* ---------- 会員詳細 ---------- */
+function renderDetail() {
+  const m = state.members[ui.detailId]; if (!m) { go("members"); return; }
+  const id = ui.detailId, mt = meetingsOf(id);
+  // 直近6か月の支払い
+  const months = []; const d = new Date(); d.setDate(1);
+  for (let i = 5; i >= 0; i--) { const x = new Date(d.getFullYear(), d.getMonth() - i, 1); months.push(`${x.getFullYear()}-${String(x.getMonth() + 1).padStart(2, "0")}`); }
+  $("v-detail").innerHTML = `
+  <button class="back" onclick="go('members')">← 会員一覧へ</button>
+  <div class="card">
+    <div class="dhead">
+      <div><div class="big">${esc(m.name)} ${m.status && m.status !== "active" ? `<span class="tag t-gray">${STATUS[m.status]}</span>` : ""}</div>
+      <div class="nick">${m.nick ? "あだ名：" + esc(m.nick) : ""}</div></div>
+      <div style="margin-left:auto;display:flex;gap:8px"><button class="btn" onclick="openMember('${id}')">編集</button><button class="btn gold" onclick="openMeeting('${id}')">＋ ミーティング記録</button></div>
+    </div>
+    <dl class="kv">
+      <dt>コース</dt><dd>${courseTag(m.course)}</dd>
+      <dt>入会日</dt><dd>${fmtDY(m.joinDate)}</dd>
+      <dt>入会金</dt><dd>${yen(m.entryFee)}　${m.entryPaid ? `<span class="tag t-green">支払い済み</span>` : `<span class="tag t-red">未払い</span>`} <button class="btn sm" onclick="toggleEntry('${id}')">${m.entryPaid ? "未払いに戻す" : "支払い済みにする"}</button></dd>
+      <dt>月額</dt><dd>${yen(m.fee)}</dd>
+      <dt>次回MTG</dt><dd><b>${fmtDY(m.nextMtg)}</b></dd>
+      ${m.contact ? `<dt>連絡先</dt><dd>${esc(m.contact)}</dd>` : ""}
+      ${m.memo ? `<dt>メモ</dt><dd style="white-space:pre-wrap">${esc(m.memo)}</dd>` : ""}
+    </dl>
+    <div class="lbl hint" style="margin-top:12px">月額の支払い（直近6か月・タップで切り替え）</div>
+    <div class="strip">${months.map(k => {
+      const na = !monthApplies(m, k), p = isPaid(id, k);
+      return `<div class="m"><button class="pc ${na ? "na" : p ? "paid" : "unpaid"}" ${na ? "disabled" : `onclick="togglePay('${id}','${k}')"`}>${na ? "−" : p ? "済" : "未"}</button><div>${Number(k.slice(5))}月</div></div>`;
+    }).join("")}</div>
+  </div>
+  ${(() => { const al = arrOf(id); return `<div class="card">
+    <div class="dhead"><h3 style="margin:0">GAIN未入金 <span class="tag ${m.gainCheck === "has" ? "t-red" : m.gainCheck === "none" ? "t-green" : "t-gray"}">聞き取り：${CHECK[m.gainCheck || "unchecked"]}</span></h3>
+      <div style="margin-left:auto;display:flex;gap:6px;flex-wrap:wrap">${Object.entries(CHECK).map(([k, v]) => `<button class="btn sm ${(m.gainCheck || "unchecked") === k ? "pri" : ""}" onclick="setCheck('${id}','${k}')">${v}</button>`).join("")}<button class="btn sm gold" onclick="openArrear('${id}')">＋ 追加</button></div></div>
+    ${al.length ? `<div style="margin:8px 0 4px">未入金 <b class="red">${arrSum(al, "unpaid").toLocaleString()}円</b>${arrSum(al, "settled") ? `　<span class="meta">精算済み ${arrSum(al, "settled").toLocaleString()}円</span>` : ""}</div>${arrTable(al, id)}` : `<div class="empty">記録はありません</div>`}
+  </div>`; })()}
+  <h2>ミーティング記録 <span class="hint">${mt.length}件</span></h2>
+  ${mt.length ? mt.map(x => `
+    <div class="mtg">
+      <div class="top"><span class="dt">${fmtDY(x.date)}</span>${x.host ? `<span class="tag t-gray">${esc(x.host)}</span>` : ""}
+        <div class="acts"><button class="btn sm" onclick="openMeeting('${id}','${x.id}')">編集</button><button class="btn sm danger" onclick="delMeeting('${x.id}')">削除</button></div></div>
+      ${x.care ? `<div class="lbl">ケアすべきこと ${x.careDone ? `<span class="tag t-gray">対応済み</span>` : ""} <button class="btn sm" style="margin-left:6px" onclick="toggleCare('${x.id}')">${x.careDone ? "未対応に戻す" : "対応済みにする"}</button></div><div class="care ${x.careDone ? "done" : ""}">${esc(x.care)}</div>` : ""}
+      ${x.next ? `<div class="lbl">次回やること</div><div class="nxt">${esc(x.next)}</div>` : ""}
+      ${x.notes ? `<details ${!x.care && !x.next ? "open" : ""}><summary>議事録を表示</summary><pre>${esc(x.notes)}</pre></details>` : ""}
+    </div>`).join("") : `<div class="card empty">まだ記録はありません</div>`}`;
+}
+
+/* ---------- 支払い表 ---------- */
+function renderPay() {
+  const y = ui.payYear;
+  const months = Array.from({ length: 12 }, (_, i) => `${y}-${String(i + 1).padStart(2, "0")}`);
+  const list = membersArr().filter(m => m.status !== "left" || months.some(k => monthApplies(m, k)))
+    .sort((a, b) => (a.kana || a.name || "").localeCompare(b.kana || b.name || "", "ja"));
+  const k = curYM();
+  const unpaidCnt = months.map(mk => list.filter(m => monthApplies(m, mk) && !isPaid(m.id, mk) && mk <= k).length);
+  $("v-pay").innerHTML = `
+  <div class="toolbar">
+    <button class="btn" onclick="ui.payYear--;renderPay()">◀</button><b>${y}年</b><button class="btn" onclick="ui.payYear++;renderPay()">▶</button>
+    <span class="hint" style="margin-left:8px">マスをタップすると「済／未」が切り替わります。入会前・退会後の月は対象外（−）です。</span>
+  </div>
+  ${list.length ? `<div class="scroll"><table class="tbl pay">
+    <tr><th class="nmc">氏名</th><th>入会金</th>${months.map(mk => `<th>${Number(mk.slice(5))}月</th>`).join("")}</tr>
+    ${list.map(m => `<tr><td class="nmc"><span class="nm" style="cursor:pointer" onclick="go('detail','${m.id}')">${esc(m.name)}</span></td>
+      <td><button class="pc ${m.entryPaid ? "paid" : "unpaid"}" onclick="toggleEntry('${m.id}')">${m.entryPaid ? "済" : "未"}</button></td>
+      ${months.map(mk => { const na = !monthApplies(m, mk), p = isPaid(m.id, mk);
+        return `<td><button class="pc ${na ? "na" : p ? "paid" : mk > k ? "" : "unpaid"}" ${na ? "disabled" : `onclick="togglePay('${m.id}','${mk}')"`}>${na ? "−" : p ? "済" : mk > k ? "" : "未"}</button></td>`; }).join("")}
+    </tr>`).join("")}
+    <tr><td class="nmc hint">未払い人数</td><td></td>${unpaidCnt.map(n => `<td class="hint">${n || ""}</td>`).join("")}</tr>
+  </table></div>` : `<div class="card empty">会員が登録されていません</div>`}`;
+}
+
+/* ---------- GAIN未入金 ---------- */
+const arrOf = id => Object.entries(state.arrears).filter(([, x]) => x.memberId === id).map(([aid, x]) => ({ id: aid, ...x })).sort((a, b) => (a.date || "").localeCompare(b.date || ""));
+const arrAmt = x => Number(x.amount ?? (Number(x.qty || 0) * Number(x.unitPrice || 0))) || 0;
+const arrSum = (list, st) => list.filter(x => !st || (x.status || "unpaid") === st).reduce((s, x) => s + arrAmt(x), 0);
+function arrTable(list, memberId) {
+  if (!list.length) return `<div class="empty">記録はありません</div>`;
+  return `<div class="scroll"><table class="tbl">
+    <tr><th>取引日</th><th>商品</th><th style="text-align:right">個数</th><th style="text-align:right">単価</th><th style="text-align:right">金額</th><th>状態</th><th>証拠</th><th class="hide-sp">メモ</th><th class="noprint"></th></tr>
+    ${list.map(x => `<tr class="${x.status === "settled" ? "left" : ""}">
+      <td>${fmtDY(x.date)}</td><td style="white-space:normal">${esc(x.item)}</td>
+      <td style="text-align:right">${x.qty ?? ""}</td><td style="text-align:right">${x.unitPrice != null ? Number(x.unitPrice).toLocaleString() : ""}</td>
+      <td style="text-align:right"><b>${arrAmt(x).toLocaleString()}</b></td>
+      <td>${x.status === "settled" ? `<span class="tag t-green">精算済み</span><div class="meta">${fmtD(x.settledDate)}${x.settledBy ? " " + esc(x.settledBy) : ""}</div>` : `<span class="tag t-red">未入金</span>`}</td>
+      <td style="white-space:normal">${evCell(x)}</td>
+      <td class="hide-sp" style="white-space:normal;font-size:12px">${esc(x.note)}</td>
+      <td class="noprint"><button class="btn sm" onclick="openArrear('${memberId || x.memberId}','${x.id}')">編集</button></td></tr>`).join("")}
+  </table></div>`;
+}
+function renderArrears() {
+  const all = Object.entries(state.arrears).map(([id, x]) => ({ id, ...x }));
+  const mem = membersArr();
+  const total = arrSum(all, "unpaid"), settled = arrSum(all, "settled");
+  const checked = mem.filter(m => m.gainCheck && m.gainCheck !== "unchecked").length;
+  let list = mem.map(m => { const l = arrOf(m.id); return { m, l, unpaid: arrSum(l, "unpaid"), settled: arrSum(l, "settled") }; });
+  const f = ui.arrFilter || "unpaid";
+  if (f === "settled") list = list.filter(r => r.l.length && r.unpaid === 0);
+  if (f === "unchecked") list = list.filter(r => !r.m.gainCheck || r.m.gainCheck === "unchecked");
+  if (f === "unpaid") list = list.filter(r => r.unpaid > 0);
+  if (f === "needev") list = list.filter(r => r.l.some(needEv)).map(r => ({ ...r, l: r.l.filter(needEv) }));
+  if (f === "noev") list = list.filter(r => r.l.some(noEv)).map(r => ({ ...r, l: r.l.filter(noEv) }));
+  const needAmt = all.filter(needEv).reduce((s, x) => s + arrAmt(x), 0);
+  const noAmt = all.filter(noEv).reduce((s, x) => s + arrAmt(x), 0);
+  list.sort((a, b) => b.unpaid - a.unpaid || (a.m.kana || a.m.name).localeCompare(b.m.kana || b.m.name, "ja"));
+  const chip = (v, label) => `<button class="chip ${f === v ? "on" : ""}" onclick="ui.arrFilter='${v}';renderArrears()">${label}</button>`;
+  $("v-arrears").innerHTML = `
+  <div class="printonly"><h2>GILD　GAIN代表による会員への未入金一覧（${fmtDY(todayStr())} 時点）</h2></div>
+  <div class="grid3">
+    <div class="card stat"><div class="hint">未入金 合計</div><div class="num red">${total.toLocaleString()}<small>円</small></div>${needAmt ? `<div class="meta">うち証拠を集める必要あり ${needAmt.toLocaleString()}円</div>` : ""}${noAmt ? `<div class="meta">うち証拠が存在しない ${noAmt.toLocaleString()}円</div>` : ""}</div>
+    <div class="card stat"><div class="hint">精算済み 合計</div><div class="num">${settled.toLocaleString()}<small>円</small></div></div>
+    <div class="card stat"><div class="hint">会員への聞き取り</div><div class="num">${checked}<small> / ${mem.length}人 確認済み</small></div></div>
+  </div>
+  <div class="toolbar noprint">
+    <div class="chips">${chip("unpaid", "未入金が残っている会員")}${chip("settled", "精算が終わった会員")}${chip("unchecked", "まだ聞き取りしていない会員")}${chip("needev", "証拠を集める必要がある")}${chip("noev", "証拠が存在しない")}</div>
+    <div style="margin-left:auto;display:flex;gap:8px"><button class="btn gold" onclick="openArrear()">＋ 未入金を追加</button><button class="btn" onclick="exportArrCSV()">CSVで書き出し</button><button class="btn" onclick="window.print()">印刷・PDF</button></div>
+  </div>
+  ${list.length ? list.map(r => `
+    <div class="card arr">
+      <div class="dhead"><div><span class="nm" style="font-weight:700;cursor:pointer" onclick="go('detail','${r.m.id}')">${esc(r.m.name)}</span>${r.m.nick ? ` <span class="meta">（${esc(r.m.nick)}）</span>` : ""}
+        <span class="tag ${r.m.gainCheck === "has" ? "t-red" : r.m.gainCheck === "none" ? "t-green" : "t-gray"}">聞き取り：${CHECK[r.m.gainCheck || "unchecked"]}</span></div>
+        <div style="margin-left:auto;text-align:right"><div class="hint">未入金</div><b class="red" style="font-size:17px">${r.unpaid.toLocaleString()}円</b>${r.settled ? `<div class="meta">精算済み ${r.settled.toLocaleString()}円</div>` : ""}</div></div>
+      ${r.l.length ? `<div style="margin-top:8px">${arrTable(r.l, r.m.id)}</div>` : ""}
+      <div class="noprint" style="margin-top:8px;display:flex;gap:6px;flex-wrap:wrap">
+        <button class="btn sm" onclick="openArrear('${r.m.id}')">＋ この会員に追加</button>
+        ${Object.entries(CHECK).map(([k, v]) => `<button class="btn sm ${(r.m.gainCheck || "unchecked") === k ? "pri" : ""}" onclick="setCheck('${r.m.id}','${k}')">${v}</button>`).join("")}
+      </div>
+    </div>`).join("") : `<div class="card empty">該当する会員はいません</div>`}`;
+}
+async function setCheck(id, v) {
+  state.members[id].gainCheck = v; render(); toast("聞き取り状況を更新しました");
+  await save("PATCH", `members/${id}`, { gainCheck: v });
+}
+function openArrear(memberId, aid) {
+  const x = aid ? state.arrears[aid] : { date: "", qty: 1, status: "unpaid" };
+  const opts = membersArr().sort((a, b) => (a.kana || a.name).localeCompare(b.kana || b.name, "ja"))
+    .map(m => `<option value="${m.id}" ${m.id === (memberId || x.memberId) ? "selected" : ""}>${esc(m.name)}${m.nick ? "（" + esc(m.nick) + "）" : ""}</option>`).join("");
+  modal(`<h3>${aid ? "未入金の編集" : "未入金を追加"}</h3>
+    <div class="f"><label>会員 *</label><select id="aMem"><option value="">選択してください</option>${opts}</select></div>
+    <div class="f2"><div class="f"><label>取引日 *</label><input id="aDate" type="date" value="${esc(x.date)}"></div>
+    <div class="f"><label>商品名・型番 *</label><input id="aItem" value="${esc(x.item)}"></div></div>
+    <div class="f2"><div class="f"><label>個数</label><input id="aQty" type="number" inputmode="numeric" value="${esc(x.qty)}"></div>
+    <div class="f"><label>単価（円）</label><input id="aUnit" type="number" inputmode="numeric" value="${esc(x.unitPrice)}"></div></div>
+    <div class="f"><label>金額（円）*　個数×単価で自動計算。違う場合は直接入力</label><input id="aAmt" type="number" inputmode="numeric" value="${esc(x.amount)}"></div>
+    <div class="f2"><div class="f"><label>状態</label><select id="aSt">${Object.entries(ARR_ST).map(([k, v]) => `<option value="${k}" ${(x.status || "unpaid") === k ? "selected" : ""}>${v}</option>`).join("")}</select></div>
+    <div class="f" id="aSetWrap"><label>精算日</label><input id="aSetDate" type="date" value="${esc(x.settledDate)}"></div></div>
+    <div class="f" id="aByWrap"><label>誰が精算したか</label><input id="aBy" value="${esc(x.settledBy)}" placeholder="例：HAK立替、KANETAKA立替、GAINから回収"></div>
+    <div class="f"><label>証拠（あるものすべてにチェック）</label><div style="display:flex;flex-wrap:wrap;gap:6px 14px">${Object.entries(EVID).map(([k, v]) => `<label class="chk" style="color:inherit;font-size:14px;margin:0"><input type="checkbox" class="aEv" value="${k}" ${(x.evidence || []).includes(k) ? "checked" : ""}>${v}</label>`).join("")}</div></div>
+    <div class="f" id="aEvStWrap"><label>証拠が手元にない場合の状況</label><select id="aEvSt">${Object.entries(EV_ST).map(([k, v]) => `<option value="${k}" ${(evState(x) === k || (k === "pending" && evState(x) === "have")) ? "selected" : ""}>${v}</option>`).join("")}</select></div>
+    <div class="f"><label>証拠の保管場所・補足（例：LINEのスクショを共有ドライブ「GAIN証拠」に保存済み）</label><input id="aEvNote" value="${esc(x.evidenceNote)}"></div>
+    <div class="f"><label>メモ（会員からの申告内容など）</label><textarea id="aNote" style="min-height:60px">${esc(x.note)}</textarea></div>
+    <div class="mact">${aid ? `<button class="btn danger" style="margin-right:auto" onclick="delArrear('${aid}')">削除</button>` : ""}<button class="btn" onclick="closeModal()">キャンセル</button>
+    ${aid ? "" : `<button class="btn" onclick="saveArrear(null,true)">保存して続けて入力</button>`}<button class="btn pri" onclick="saveArrear(${aid ? `'${aid}'` : "null"})">保存</button></div>`);
+  const calc = () => { const q = $("aQty").value, u = $("aUnit").value; if (q !== "" && u !== "") $("aAmt").value = Number(q) * Number(u); };
+  $("aQty").oninput = calc; $("aUnit").oninput = calc;
+  const evSync = () => $("aEvStWrap").classList.toggle("hidden", !!document.querySelector(".aEv:checked"));
+  document.querySelectorAll(".aEv").forEach(e => e.onchange = evSync); evSync();
+  const sync = () => { const s = $("aSt").value === "settled"; $("aSetWrap").classList.toggle("hidden", !s); $("aByWrap").classList.toggle("hidden", !s); };
+  $("aSt").onchange = () => { if ($("aSt").value === "settled" && !$("aSetDate").value) $("aSetDate").value = todayStr(); sync(); }; sync();
+}
+async function saveArrear(aid, cont) {
+  const memberId = $("aMem").value, date = $("aDate").value, item = $("aItem").value.trim(), amt = $("aAmt").value;
+  if (!memberId || !date || !item || amt === "") { alert("会員・取引日・商品名・金額を入力してください"); return; }
+  const n = v => v === "" ? null : Number(v), st = $("aSt").value;
+  const data = { memberId, date, item, qty: n($("aQty").value), unitPrice: n($("aUnit").value), amount: Number(amt), status: st,
+    settledDate: st === "settled" ? $("aSetDate").value : "", settledBy: st === "settled" ? $("aBy").value.trim() : "", note: $("aNote").value.trim(),
+    evidence: [...document.querySelectorAll(".aEv:checked")].map(e => e.value), evStatus: $("aEvSt").value, evidenceNote: $("aEvNote").value.trim(), updatedAt: Date.now(), by: auth?.email || "demo" };
+  const id = aid || uid();
+  state.arrears[id] = { ...(state.arrears[id] || { createdAt: Date.now() }), ...data };
+  const m = state.members[memberId], patch = (!m.gainCheck || m.gainCheck !== "has") ? { gainCheck: "has" } : null;
+  if (patch) Object.assign(m, patch);
+  toast("保存しました");
+  if (cont) { openArrear(memberId); $("aDate").value = date; } else { closeModal(); }
+  render();
+  await save(aid ? "PATCH" : "PUT", `arrears/${id}`, aid ? data : state.arrears[id]);
+  if (patch) await save("PATCH", `members/${memberId}`, patch);
+}
+function delArrear(aid) {
+  confirmBox("この未入金の記録を削除しますか？", async () => { delete state.arrears[aid]; render(); toast("削除しました"); await save("DELETE", `arrears/${aid}`); });
+}
+function exportArrCSV() {
+  const head = ["氏名", "あだ名", "聞き取り", "取引日", "商品", "個数", "単価", "金額", "状態", "精算日", "精算者", "証拠", "証拠の保管場所・補足", "メモ"];
+  const rows = Object.values(state.arrears).map(x => { const m = state.members[x.memberId] || {}; return [m.name, m.nick, CHECK[m.gainCheck || "unchecked"], x.date, x.item, x.qty, x.unitPrice, arrAmt(x), ARR_ST[x.status || "unpaid"], x.settledDate, x.settledBy, evState(x) === "have" ? (x.evidence || []).filter(k => EVID[k]).map(k => EVID[k]).join("・") : evState(x) === "none" ? "存在しない" : evState(x) === "requested" ? "提出を依頼中" : "未収集", x.evidenceNote, x.note]; })
+    .sort((a, b) => String(a[0]).localeCompare(String(b[0]), "ja") || String(a[3]).localeCompare(String(b[3])));
+  const csv = [head, ...rows].map(r => r.map(v => `"${String(v ?? "").replace(/"/g, '""')}"`).join(",")).join("\r\n");
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(new Blob(["﻿" + csv], { type: "text/csv" }));
+  a.download = `GILD_GAIN未入金_${todayStr()}.csv`; a.click();
+}
+
+/* ---------- 操作 ---------- */
+async function togglePay(id, k) {
+  const v = !isPaid(id, k);
+  state.payments[id] = state.payments[id] || {};
+  if (v) state.payments[id][k] = true; else delete state.payments[id][k];
+  render(); toast(v ? "支払い済みにしました" : "未払いに戻しました");
+  await save(v ? "PUT" : "DELETE", `payments/${id}/${k}`, v ? true : undefined);
+}
+async function toggleEntry(id) {
+  const m = state.members[id]; m.entryPaid = !m.entryPaid;
+  render(); toast(m.entryPaid ? "入会金を支払い済みにしました" : "入会金を未払いに戻しました");
+  await save("PATCH", `members/${id}`, { entryPaid: m.entryPaid });
+}
+async function toggleCare(mid) {
+  const x = state.meetings[mid]; x.careDone = !x.careDone;
+  render(); toast(x.careDone ? "対応済みにしました" : "未対応に戻しました");
+  await save("PATCH", `meetings/${mid}`, { careDone: x.careDone });
+}
+function delMeeting(mid) {
+  confirmBox("このミーティング記録を削除しますか？", async () => {
+    delete state.meetings[mid]; render(); toast("削除しました");
+    await save("DELETE", `meetings/${mid}`);
+  });
+}
+
+/* ---------- モーダル ---------- */
+function modal(html) { $("modalRoot").innerHTML = `<div class="ov" onclick="if(event.target===this)closeModal()"><div class="modal">${html}</div></div>`; }
+function closeModal() { $("modalRoot").innerHTML = ""; }
+function confirmBox(msg, ok) {
+  modal(`<h3>確認</h3><p>${esc(msg)}</p><div class="mact"><button class="btn" onclick="closeModal()">キャンセル</button><button class="btn pri" id="cfOk">OK</button></div>`);
+  $("cfOk").onclick = () => { closeModal(); ok(); };
+}
+
+function openMember(id) {
+  const m = id ? state.members[id] : { course: "store", status: "active", joinDate: todayStr() };
+  modal(`<h3>${id ? "会員情報の編集" : "会員を追加"}</h3>
+    <div class="f2"><div class="f"><label>氏名 *</label><input id="fName" value="${esc(m.name)}"></div>
+    <div class="f"><label>ふりがな（並び替え用）</label><input id="fKana" value="${esc(m.kana)}"></div></div>
+    <div class="f2"><div class="f"><label>サロン内のあだ名</label><input id="fNick" value="${esc(m.nick)}"></div>
+    <div class="f"><label>コース</label><select id="fCourse">${Object.entries(COURSES).map(([k, v]) => `<option value="${k}" ${m.course === k ? "selected" : ""}>${v}</option>`).join("")}</select></div></div>
+    <div class="f2"><div class="f"><label>入会日</label><input id="fJoin" type="date" value="${esc(m.joinDate)}"></div>
+    <div class="f"><label>状態</label><select id="fStatus">${Object.entries(STATUS).map(([k, v]) => `<option value="${k}" ${(m.status || "active") === k ? "selected" : ""}>${v}</option>`).join("")}</select></div></div>
+    <div class="f" id="leftWrap"><label>退会日（この月まで支払い対象）</label><input id="fLeft" type="date" value="${esc(m.leftDate)}"></div>
+    <div class="f2"><div class="f"><label>入会金（円）</label><input id="fEntry" type="number" inputmode="numeric" value="${esc(m.entryFee)}"></div>
+    <div class="f"><label>月額（円）</label><input id="fFee" type="number" inputmode="numeric" value="${esc(m.fee)}"></div></div>
+    <div class="f chk"><input type="checkbox" id="fEntryPaid" ${m.entryPaid ? "checked" : ""}><label for="fEntryPaid" style="margin:0;color:inherit;font-size:14px">入会金は支払い済み</label></div>
+    <div class="f"><label>次回ミーティング日</label><input id="fNext" type="date" value="${esc(m.nextMtg)}"></div>
+    <div class="f"><label>連絡先（LINE名など）</label><input id="fContact" value="${esc(m.contact)}"></div>
+    <div class="f"><label>メモ（会員の背景・目標など）</label><textarea id="fMemo">${esc(m.memo)}</textarea></div>
+    <div class="mact">${id ? `<button class="btn danger" style="margin-right:auto" onclick="delMember('${id}')">削除</button>` : ""}<button class="btn" onclick="closeModal()">キャンセル</button><button class="btn pri" onclick="saveMember(${id ? `'${id}'` : ""})">保存</button></div>`);
+  const sync = () => $("leftWrap").classList.toggle("hidden", $("fStatus").value !== "left");
+  $("fStatus").onchange = sync; sync();
+}
+async function saveMember(id) {
+  const name = $("fName").value.trim();
+  if (!name) { alert("氏名を入力してください"); return; }
+  const num = v => v === "" ? null : Number(v);
+  const data = {
+    name, kana: $("fKana").value.trim(), nick: $("fNick").value.trim(), course: $("fCourse").value,
+    joinDate: $("fJoin").value, status: $("fStatus").value, leftDate: $("fStatus").value === "left" ? $("fLeft").value : "",
+    entryFee: num($("fEntry").value), fee: num($("fFee").value), entryPaid: $("fEntryPaid").checked,
+    nextMtg: $("fNext").value, contact: $("fContact").value.trim(), memo: $("fMemo").value.trim(), updatedAt: Date.now()
+  };
+  const newId = id || uid();
+  state.members[newId] = { ...(state.members[newId] || { createdAt: Date.now() }), ...data };
+  closeModal(); render(); toast("保存しました");
+  await save(id ? "PATCH" : "PUT", `members/${newId}`, id ? data : state.members[newId]);
+}
+function delMember(id) {
+  confirmBox("この会員を削除しますか？ミーティング記録・支払い記録・GAIN未入金の記録も削除されます。（退会の場合は「状態」を退会にするのがおすすめです）", async () => {
+    const mids = Object.keys(state.meetings).filter(k => state.meetings[k].memberId === id);
+    const aids = Object.keys(state.arrears).filter(k => state.arrears[k].memberId === id);
+    delete state.members[id]; delete state.payments[id]; mids.forEach(k => delete state.meetings[k]); aids.forEach(k => delete state.arrears[k]);
+    go("members"); toast("削除しました");
+    await save("DELETE", `members/${id}`); await save("DELETE", `payments/${id}`);
+    for (const k of mids) await save("DELETE", `meetings/${k}`);
+    for (const k of aids) await save("DELETE", `arrears/${k}`);
+  });
+}
+
+function openMeeting(memberId, mid) {
+  const m = state.members[memberId];
+  const x = mid ? state.meetings[mid] : { date: todayStr(), host: "" };
+  modal(`<h3>ミーティング記録 — ${esc(m.name)}${m.nick ? `（${esc(m.nick)}）` : ""}</h3>
+    <div class="f2"><div class="f"><label>日付</label><input id="mDate" type="date" value="${esc(x.date)}"></div>
+    <div class="f"><label>担当</label><select id="mHost"><option value="">—</option>${CONFIG.hosts.map(h => `<option ${x.host === h ? "selected" : ""}>${esc(h)}</option>`).join("")}<option value="両代表" ${x.host === "両代表" ? "selected" : ""}>両代表</option></select></div></div>
+    <div class="f"><label>議事録（そのまま貼り付けOK）</label><textarea id="mNotes" style="min-height:140px">${esc(x.notes)}</textarea></div>
+    <div class="f"><label>ケアすべきこと（ホームの「未対応のケア事項」に表示されます）</label><textarea id="mCare">${esc(x.care)}</textarea></div>
+    <div class="f"><label>次回やること・宿題</label><textarea id="mNext" style="min-height:60px">${esc(x.next)}</textarea></div>
+    <div class="f"><label>次回ミーティング日（会員情報の「次回MTG」も更新されます）</label><input id="mNextDate" type="date" value="${mid ? "" : ""}"><div class="hint">現在の次回MTG：${fmtDY(m.nextMtg)}　空欄なら変更しません（今日のMTGが次回予定日だった場合は自動で消えます）</div></div>
+    <div class="mact"><button class="btn" onclick="closeModal()">キャンセル</button><button class="btn pri" onclick="saveMeeting('${memberId}'${mid ? `,'${mid}'` : ""})">保存</button></div>`);
+}
+async function saveMeeting(memberId, mid) {
+  const date = $("mDate").value;
+  if (!date) { alert("日付を入力してください"); return; }
+  const data = { memberId, date, host: $("mHost").value, notes: $("mNotes").value.trim(), care: $("mCare").value.trim(), next: $("mNext").value.trim(), updatedAt: Date.now(), by: auth?.email || "demo" };
+  const newId = mid || uid();
+  if (!mid) data.careDone = false;
+  state.meetings[newId] = { ...(state.meetings[newId] || { createdAt: Date.now() }), ...data };
+  // 次回MTG日の更新
+  const m = state.members[memberId], nd = $("mNextDate").value;
+  let patch = null;
+  if (nd) patch = { nextMtg: nd };
+  else if (!mid && m.nextMtg && m.nextMtg <= date) patch = { nextMtg: "" };
+  if (patch) Object.assign(m, patch);
+  closeModal(); render(); toast("保存しました");
+  await save(mid ? "PATCH" : "PUT", `meetings/${newId}`, mid ? data : state.meetings[newId]);
+  if (patch) await save("PATCH", `members/${memberId}`, patch);
+}
+
+/* ---------- まとめて登録・書き出し ---------- */
+function openBulk() {
+  modal(`<h3>会員をまとめて登録</h3>
+    <p class="hint">1行に1人ずつ、<b>氏名,あだ名,コース,入会日,月額</b> の順でカンマ区切りで入力します（あだ名以降は省略可）。<br>コースは「店舗」「電脳」「両方」のいずれか。入会日は 2026-04-01 の形式。スプレッドシートからのコピー（タブ区切り）でもOKです。</p>
+    <div class="f"><textarea id="bulkTxt" style="min-height:200px" placeholder="山田太郎,たろう,店舗,2026-04-01,10000&#10;佐藤花子,はなちゃん,両方"></textarea></div>
+    <div class="mact"><button class="btn" onclick="closeModal()">キャンセル</button><button class="btn pri" onclick="doBulk()">登録</button></div>`);
+}
+async function doBulk() {
+  const cmap = { "店舗": "store", "電脳": "online", "両方": "both", "店舗・電脳": "both" };
+  const lines = $("bulkTxt").value.split(/\r?\n/).map(l => l.trim()).filter(Boolean);
+  const add = {};
+  for (const l of lines) {
+    const [name, nick, course, joinDate, fee] = l.split(/\t|,/).map(s => (s || "").trim());
+    if (!name) continue;
+    add[uid()] = { name, nick: nick || "", course: cmap[course] || "store", joinDate: /^\d{4}-\d{2}-\d{2}$/.test(joinDate || "") ? joinDate : "", fee: fee ? Number(fee.replace(/[^\d]/g, "")) || null : null, status: "active", entryPaid: false, createdAt: Date.now() };
+  }
+  const n = Object.keys(add).length;
+  if (!n) { alert("登録できる行がありません"); return; }
+  Object.assign(state.members, add); closeModal(); render(); toast(`${n}人を登録しました`);
+  await save("PATCH", "members", add);
+}
+function exportCSV() {
+  const k = curYM();
+  const head = ["氏名", "ふりがな", "あだ名", "コース", "状態", "入会日", "入会金", "入会金支払い", "月額", `${k}支払い`, "次回MTG", "前回MTG", "未対応ケア数", "連絡先", "メモ"];
+  const rows = membersArr().map(m => [m.name, m.kana, m.nick, COURSES[m.course], STATUS[m.status || "active"], m.joinDate, m.entryFee, m.entryPaid ? "済" : "未", m.fee, isPaid(m.id, k) ? "済" : "未", m.nextMtg, lastMtg(m.id), openCare(m.id).length, m.contact, m.memo]);
+  const csv = [head, ...rows].map(r => r.map(v => `"${String(v ?? "").replace(/"/g, '""')}"`).join(",")).join("\r\n");
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(new Blob(["﻿" + csv], { type: "text/csv" }));
+  a.download = `GILD会員_${todayStr()}.csv`; a.click();
+}
+
+/* ---------- デモデータ ---------- */
+function demoData() {
+  const t = new Date(), d = n => { const x = new Date(t); x.setDate(x.getDate() + n); return x.toLocaleDateString("sv-SE"); };
+  const mk = (name, kana, nick, course, join, fee, next, entryPaid = true) => ({ name, kana, nick, course, joinDate: join, fee, entryFee: 50000, entryPaid, status: "active", nextMtg: next });
+  state.members = {
+    a1: mk("山田 太郎", "やまだたろう", "たろさん", "store", "2026-04-01", 10000, d(2)),
+    a2: mk("佐藤 花子", "さとうはなこ", "はなちゃん", "both", "2026-05-10", 15000, d(0)),
+    a3: mk("鈴木 一郎", "すずきいちろう", "イチ", "online", "2026-06-01", 10000, ""),
+    a4: mk("高橋 美咲", "たかはしみさき", "みさき", "online", "2026-10-15", 10000, d(9), false),
+    a5: { ...mk("伊藤 健", "いとうけん", "ケン", "store", "2026-03-01", 10000, ""), status: "paused" }
+  };
+  state.meetings = {
+    m1: { memberId: "a1", date: d(-12), host: "KANETAKA代表", notes: "店舗せどりの進捗。仕入れ額は月30万円まで来ている。\n資金繰りに少し不安があるとのこと。", care: "資金繰りの不安 → 次回、回転の早い商品の選び方を一緒に確認", next: "量販店のクーポン情報をまとめて共有する", careDone: false },
+    m2: { memberId: "a2", date: d(-20), host: "HAK代表", notes: "電脳と店舗の両立で時間が足りない。", care: "時間配分の相談。モチベーション低下気味なので声かけ多めに", next: "週の作業スケジュール表を作ってくる", careDone: false },
+    m3: { memberId: "a3", date: d(-60), host: "KANETAKA代表", notes: "初回面談。目標は月利10万円。", care: "", next: "リサーチツールの使い方を練習", careDone: false },
+    m4: { memberId: "a1", date: d(-40), host: "HAK代表", notes: "初回面談。", care: "", next: "", careDone: false }
+  };
+  const cur = curYM();
+  state.payments = { a1: { [cur]: true }, a3: { [cur]: true }, a5: {} };
+  state.members.a1.gainCheck = "has"; state.members.a2.gainCheck = "has"; state.members.a3.gainCheck = "none";
+  state.arrears = {
+    r1: { memberId: "a1", date: "2026-08-12", item: "ダイソン V12 Detect Slim", qty: 2, unitPrice: 62000, amount: 124000, status: "unpaid", evidence: ["line", "photo"], evidenceNote: "LINEのスクショを共有ドライブに保存", note: "" },
+    r2: { memberId: "a1", date: "2026-09-03", item: "パナソニック ナノケア EH-NA0J", qty: 5, unitPrice: 21500, amount: 107500, status: "unpaid", evStatus: "requested", evidenceNote: "11/20 LINEのスクショ提出をお願い済み", note: "" },
+    r3: { memberId: "a2", date: "2026-07-20", item: "Nintendo Switch 2", qty: 3, unitPrice: 45000, amount: 135000, status: "settled", settledDate: "2026-11-10", settledBy: "HAK立替", note: "" },
+    r4: { memberId: "a2", date: "2026-09-28", item: "iRobot ルンバ コンボ j9+", qty: 1, unitPrice: 98000, amount: 98000, status: "unpaid", evidence: [], evStatus: "none", note: "振込予定と言われたまま" }
+  };
+}
+
+/* ---------- 起動 ---------- */
+async function startApp() {
+  $("loginView").classList.add("hidden"); $("appView").classList.remove("hidden");
+  $("userEmail").textContent = DEMO ? "デモ" : auth.email;
+  if (DEMO) { $("demoBar").classList.remove("hidden"); demoData(); }
+  else { try { await loadAll(); } catch (e) { alert("データの読み込みに失敗しました: " + e.message); } }
+  go("home");
+}
+(function init() {
+  if (DEMO) { startApp(); return; }
+  const s = sessionStorage.getItem("gildAuth");
+  if (s) { auth = JSON.parse(s); startApp(); }
+  else { $("loginView").classList.remove("hidden"); $("lgPass").addEventListener("keydown", e => { if (e.key === "Enter") doLogin(); }); }
+})();
+</script>
+</body>
+</html>
