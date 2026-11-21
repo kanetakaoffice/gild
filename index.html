@@ -183,6 +183,7 @@ h3{font-size:15px;margin:0 0 8px}
 .pfee{font-size:10px;color:var(--sub);margin-top:2px;line-height:1}
 .pay .sumc{text-align:right;white-space:nowrap;padding-left:14px}
 .pay tr.ptotal td{background:#faf9f5;font-size:12px}
+.pc.part{background:#fbefdc;border-color:#ecd3a9;color:#a8661c;font-size:11px}
 /* ページ見出しバー */
 .pbar{display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin:0 0 16px}
 .pbar h1{font-size:19px;margin:0;font-weight:700;letter-spacing:.03em}
@@ -489,6 +490,16 @@ const isPaid = (id, k) => !!state.payments[id]?.[k];
 const histOf = m => (m.feeHistory ? Object.values(m.feeHistory) : []).filter(h => h && h.from).sort((a, b) => a.from.localeCompare(b.from));
 function feeFor(m, k) { let f = m.fee; for (const h of histOf(m)) if (h.from <= k) f = h.fee; return f == null || f === "" ? null : Number(f); }
 const paidAmt = (m, k) => { const v = state.payments[m.id]?.[k]; return typeof v === "number" ? v : v ? (feeFor(m, k) || 0) : 0; };
+// 入会金：entryPays = { id: { date, amount, memo } }、entryPlan = 分割の約束（文字）
+const entryPaysOf = m => Object.entries(m.entryPays || {}).map(([pid, x]) => ({ pid, ...x })).sort((a, b) => (a.date || "").localeCompare(b.date || ""));
+function entryInfo(m) {
+  const fee = m.entryFee == null || m.entryFee === "" ? null : Number(m.entryFee), pays = entryPaysOf(m);
+  let paid = pays.reduce((a, x) => a + (Number(x.amount) || 0), 0);
+  if (!pays.length && m.entryPaid) paid = fee || 0;
+  const st = fee == null ? (m.entryPaid || paid ? "done" : "none") : paid >= fee && (paid > 0 || m.entryPaid) ? "done" : paid > 0 ? "part" : "none";
+  return { fee, paid, rest: fee == null ? 0 : Math.max(fee - paid, 0), st, pays, installment: !!m.entryPlan || pays.length > 1 || st === "part" };
+}
+const man = v => (Math.round(v / 1000) / 10).toLocaleString() + "万";
 const ymLabel = k => `${k.slice(0, 4)}年${Number(k.slice(5))}月`;
 function yearSums(m, y) {
   const now = curYM(); let paid = 0, due = 0;
@@ -535,6 +546,7 @@ function renderHome() {
   cares.sort((a, b) => (b.x.date || "").localeCompare(a.x.date || "") || byNo(a.m, b.m));
   const k = curYM();
   const unpaid = act.filter(m => ["active", "leaving", undefined].includes(m.status) && monthApplies(m, k) && !isPaid(m.id, k)).sort(byNo);
+  const entryPart = act.filter(m => { const e = entryInfo(m); return e.rest > 0 && (e.st === "part" || m.entryPlan); }).sort(byNo);
   const leaving = act.filter(m => m.status === "leaving").sort((a, b) => (a.leftDate || "9999").localeCompare(b.leftDate || "9999") || byNo(a, b));
   const idle = active.filter(m => !m.nextMtg && (!hasMtg(m.id) || (lastMtg(m.id) && daysFrom(lastMtg(m.id)) <= -CONFIG.idleDays))).sort(byNo);
   const sched = act.filter(m => m.nextMtg && daysFrom(m.nextMtg) <= 6).sort((a, b) => (a.nextMtg + (a.nextMtgTime || "99")).localeCompare(b.nextMtg + (b.nextMtgTime || "99")) || byNo(a, b));
@@ -587,6 +599,10 @@ function renderHome() {
       <div class="card"><h3>フォローが必要<span class="cnt">${idle.length}</span><span class="meta" style="font-weight:400;margin-left:8px">${CONFIG.idleDays}日以上ミーティングなし・次回未定</span></h3>
         ${idle.length ? cut(idle, "idle").map(m => `<div class="row rowlink" onclick="openRow('${m.id}')"><div class="grow">${nm(m)} ${courseTag(m.course)}<div class="meta">前回：${lastLabel(m.id, true)}</div></div><button class="btn sm" onclick="event.stopPropagation();openMember('${m.id}')">次回MTGを入れる</button></div>`).join("") + more("idle", idle.length) : `<div class="empty">該当する会員はいません</div>`}
       </div>
+      ${entryPart.length ? `<div class="card"><h3>入会金 分割中<span class="cnt">${entryPart.length}</span><span class="meta" style="font-weight:400;margin-left:8px">残り合計 ${entryPart.reduce((a, m) => a + entryInfo(m).rest, 0).toLocaleString()}円</span></h3>
+        ${cut(entryPart, "entry").map(m => { const e = entryInfo(m), last = e.pays[e.pays.length - 1];
+          return `<div class="row rowlink" onclick="openRow('${m.id}')"><div class="grow">${nm(m)}<div class="meta">残り ${e.rest.toLocaleString()}円（払った額 ${e.paid.toLocaleString()}円）${last ? "　前回 " + (last.date ? fmtD(last.date) : "日付不明") : ""}${m.entryPlan ? "　" + esc(m.entryPlan) : ""}</div></div><button class="btn sm" onclick="event.stopPropagation();openEntry('${m.id}')">支払いを記録</button></div>`; }).join("") + more("entry", entryPart.length)}
+      </div>` : ""}
       <div class="card"><h3>${Number(k.slice(5))}月分の月額 未払い<span class="cnt">${unpaid.length}</span></h3>
         ${unpaid.length ? cut(unpaid, "unpaid").map(m => `<div class="row rowlink" onclick="openRow('${m.id}')"><div class="grow">${nm(m)}<div class="meta">月額 ${yen(feeFor(m, k))}</div></div><button class="btn sm" onclick="event.stopPropagation();togglePay('${m.id}','${k}')">支払い済みにする</button></div>`).join("") + more("unpaid", unpaid.length) : `<div class="empty">全員支払い済みです</div>`}
       </div>
@@ -667,7 +683,8 @@ function renderDetail() {
       ${m.salonNo ? `<dt>サロンNo</dt><dd>${esc(m.salonNo)}</dd>` : ""}
       <dt>コース</dt><dd>${courseTag(m.course)}</dd>
       <dt>入会日</dt><dd>${fmtDY(m.joinDate)}</dd>
-      <dt>入会金</dt><dd>${yen(m.entryFee)}　${m.entryPaid ? `<span class="tag t-green">支払い済み</span>` : `<span class="tag t-red">未払い</span>`} <button class="btn sm" onclick="toggleEntry('${id}')">${m.entryPaid ? "未払いに戻す" : "支払い済みにする"}</button></dd>
+      ${(() => { const e = entryInfo(m); return `<dt>入会金</dt><dd>${yen(e.fee)}　<span class="tag ${e.st === "done" ? "t-green" : e.st === "part" ? "t-orange" : "t-red"}">${e.st === "done" ? "支払い済み" : e.st === "part" ? "分割で支払い中" : "未払い"}</span>${e.st === "part" ? `　払った額 ${e.paid.toLocaleString()}円・<b class="red">残り ${e.rest.toLocaleString()}円</b>` : ""} <button class="btn sm" onclick="openEntry('${id}')">支払いを記録・確認</button>
+        ${m.entryPlan ? `<div class="meta">分割の約束：${esc(m.entryPlan)}</div>` : ""}${e.pays.length ? `<div class="meta">${e.pays.map(x => `${x.date ? fmtD(x.date) : "日付不明"} ${Number(x.amount).toLocaleString()}円`).join("　/　")}</div>` : ""}</dd>`; })()}
       <dt>月額</dt><dd><b>${yen(feeFor(m, curYM()))}</b><span class="meta">（${Number(curYM().slice(5))}月分）</span>${(() => { const h = histOf(m); if (!h.length) return "";
         const seg = []; let prev = m.fee; const first = h[0].from;
         if (prev != null && prev !== "") seg.push(`〜${ymLabel(prevYM(first))}：${Number(prev).toLocaleString()}円`);
@@ -746,7 +763,7 @@ function renderPay() {
   ${list.length ? `<div class="scroll"><table class="tbl pay">
     <tr><th class="nmc">氏名</th><th>入会金</th>${months.map(mk => `<th>${Number(mk.slice(5))}月</th>`).join("")}<th class="sumc">${y}年 支払い合計</th><th class="sumc">未払い額</th></tr>
     ${list.map(m => `<tr><td class="nmc"><span class="nm" style="cursor:pointer" onclick="go('detail','${m.id}')">${esc(m.name)}</span></td>
-      <td><button class="pc ${m.entryPaid ? "paid" : "unpaid"}" onclick="toggleEntry('${m.id}')">${m.entryPaid ? "済" : "未"}</button></td>
+      ${(() => { const e = entryInfo(m); return `<td><button class="pc ${e.st === "done" ? "paid" : e.st === "part" ? "part" : "unpaid"}" title="${e.fee != null ? "入会金 " + e.fee.toLocaleString() + "円・支払い済み " + e.paid.toLocaleString() + "円" : ""}" onclick="toggleEntry('${m.id}')">${e.st === "done" ? "済" : e.st === "part" ? "一部" : "未"}</button>${e.fee != null ? `<div class="pfee">${e.st === "part" ? "残" + man(e.rest) : man(e.fee)}</div>` : ""}</td>`; })()}
       ${months.map(mk => { const na = !monthApplies(m, mk), p = isPaid(m.id, mk);
         const f = na ? null : feeFor(m, mk);
         return `<td><button class="pc ${na ? "na" : p ? "paid" : mk > k ? "" : "unpaid"}" title="${na ? "" : p ? "支払い " + paidAmt(m, mk).toLocaleString() + "円" : "月額 " + (f == null ? "未設定" : f.toLocaleString() + "円")}" ${na ? "disabled" : `onclick="togglePay('${m.id}','${mk}')"`}>${na ? "−" : p ? "済" : mk > k ? "" : "未"}</button>${!na && f != null ? `<div class="pfee">${(p ? paidAmt(m, mk) : f) / 10000}万</div>` : ""}</td>`; }).join("")}
@@ -1000,9 +1017,58 @@ async function unpay(id, k) {
   await save("DELETE", `payments/${id}/${k}`);
 }
 async function toggleEntry(id) {
-  const m = state.members[id]; m.entryPaid = !m.entryPaid;
-  render(); toast(m.entryPaid ? "入会金を支払い済みにしました" : "入会金を未払いに戻しました");
-  await save("PATCH", `members/${id}`, { entryPaid: m.entryPaid });
+  const m = state.members[id], e = entryInfo(m);
+  if (e.st === "none" && !m.entryPlan) { // 一括払い：押すだけで支払い済み
+    m.entryPaid = true; render(); toast("入会金を支払い済みにしました（分割の場合は、もう一度押して記録を直せます）");
+    return save("PATCH", `members/${id}`, { entryPaid: true });
+  }
+  openEntry(id);
+}
+function openEntry(id) {
+  const m = state.members[id], e = entryInfo(m);
+  modal(`<h3>入会金 — ${esc(m.name)}</h3>
+    <dl class="kv" style="margin-top:0"><dt>入会金</dt><dd>${yen(e.fee)}</dd><dt>支払い済み</dt><dd><b>${e.paid.toLocaleString()}円</b></dd>
+    <dt>残り</dt><dd>${e.fee == null ? "—" : `<b class="${e.rest ? "red" : ""}">${e.rest.toLocaleString()}円</b>`}</dd></dl>
+    <div class="f" style="margin-top:12px"><label>分割の約束（例：10回払い・毎月10万円・2027年3月まで）</label><input id="enPlan" value="${esc(m.entryPlan)}"></div>
+    <div class="lbl hint">支払いの記録</div>
+    ${e.pays.length ? `<table class="tbl" style="margin:4px 0 10px"><tr><th>日付</th><th style="text-align:right">金額</th><th>メモ</th><th></th></tr>
+      ${e.pays.map(x => `<tr><td>${x.date ? fmtDY(x.date) : "日付不明"}</td><td style="text-align:right">${Number(x.amount).toLocaleString()}</td><td>${esc(x.memo || "")}</td><td><button class="btn sm danger" onclick="delEntryPay('${id}','${x.pid}')">削除</button></td></tr>`).join("")}</table>`
+      : `<div class="empty">${m.entryPaid ? "支払いの記録はありませんが「支払い済み」になっています（一括払い）" : "まだ記録はありません"}</div>`}
+    <div class="f2" style="margin-top:6px"><div class="f"><label>今回の支払い日</label><input id="enDate" type="date" value="${todayStr()}"></div>
+    <div class="f"><label>金額（円）</label><input id="enAmt" type="number" inputmode="numeric" placeholder="${e.rest ? "残り " + e.rest.toLocaleString() : ""}"></div></div>
+    <div class="f"><label>メモ（振込・現金など）</label><input id="enMemo"></div>
+    <div class="mact" style="flex-wrap:wrap">
+      <button class="btn danger" style="margin-right:auto" onclick="resetEntry('${id}')">すべて未払いに戻す</button>
+      <button class="btn" onclick="closeModal()">閉じる</button>
+      ${e.rest ? `<button class="btn" onclick="$('enAmt').value=${e.rest}">残りを全額入れる</button>` : ""}
+      <button class="btn pri" onclick="addEntryPay('${id}')">記録する</button></div>`);
+}
+async function addEntryPay(id) {
+  const m = state.members[id], amt = $("enAmt").value, plan = $("enPlan").value.trim();
+  const patch = {};
+  if (plan !== (m.entryPlan || "")) { m.entryPlan = plan; patch.entryPlan = plan; }
+  if (amt !== "") {
+    // 一括で「済」になっていた人に分割を記録し直す場合は、いったん支払い済みを外す
+    if (m.entryPaid && !Object.keys(m.entryPays || {}).length) m.entryPaid = false;
+    const pid = uid(); m.entryPays = { ...(m.entryPays || {}), [pid]: { date: $("enDate").value, amount: Number(amt), memo: $("enMemo").value.trim() } };
+    patch[`entryPays/${pid}`] = m.entryPays[pid];
+  } else if (!Object.keys(patch).length) { alert("金額を入力してください"); return; }
+  m.entryPaid = entryInfo(m).st === "done"; patch.entryPaid = m.entryPaid;
+  render(); openEntry(id); toast(amt !== "" ? "支払いを記録しました" : "分割の約束を保存しました");
+  await save("PATCH", `members/${id}`, patch);
+}
+function delEntryPay(id, pid) {
+  confirmBox("この支払いの記録を削除しますか？", async () => {
+    const m = state.members[id]; delete m.entryPays[pid]; m.entryPaid = entryInfo(m).st === "done";
+    render(); openEntry(id); toast("削除しました");
+    await save("DELETE", `members/${id}/entryPays/${pid}`); await save("PATCH", `members/${id}`, { entryPaid: m.entryPaid });
+  });
+}
+function resetEntry(id) {
+  confirmBox("入会金を未払いに戻しますか？（支払いの記録もすべて消えます。分割の約束は残ります）", async () => {
+    const m = state.members[id]; m.entryPays = null; m.entryPaid = false; render(); toast("未払いに戻しました");
+    await save("PATCH", `members/${id}`, { entryPays: null, entryPaid: false });
+  });
 }
 async function toggleCare(mid) {
   const x = state.meetings[mid]; x.careDone = !x.careDone;
@@ -1046,7 +1112,7 @@ function openMember(id) {
     <div class="f"><label>月額の変更履歴（何月分から、いくらに変わったか）</label>
       <div id="fhList">${histOf(m).map(h => fhRow(h.from, h.fee)).join("")}</div>
       <button type="button" class="btn sm" onclick="$('fhList').insertAdjacentHTML('beforeend', fhRow('', ''))">＋ 金額の変更を追加</button></div>
-    <div class="f chk"><input type="checkbox" id="fEntryPaid" ${m.entryPaid ? "checked" : ""}><label for="fEntryPaid" style="margin:0;color:inherit;font-size:14px">入会金は支払い済み</label></div>
+    <input type="checkbox" id="fEntryPaid" class="hidden" ${m.entryPaid ? "checked" : ""}><div class="hint" style="margin:-6px 0 12px">入会金の支払い（分割を含む）は、会員ページの「支払いを記録・確認」から入力します。</div>
     <div class="f2"><div class="f"><label>次回ミーティング日</label><input id="fNext" type="date" value="${esc(m.nextMtg)}"></div>
     <div class="f"><label>開始時刻</label><input id="fNextTime" type="time" value="${esc(m.nextMtgTime)}"></div></div>
     <div class="f2"><div class="f"><label>メールアドレス</label><input id="fEmail" type="email" value="${esc(m.email)}"></div>
@@ -1245,7 +1311,7 @@ async function doBulk() {
 function exportCSV() {
   const k = curYM();
   const head = ["サロンNo", "氏名", "ふりがな", "サロン名", "コース", "状態", "入会日", "入会金", "入会金支払い", "月額", `${k}支払い`, "次回MTG", "前回MTG", "運営側でやること（未対応）", "メール", "電話番号", "LINE名など", "メモ", "紹介者", "契約書", "締結日", "目標", "今の状況", "注意・違反の件数"];
-  const rows = membersArr().map(m => [m.salonNo, m.name, m.kana, m.nick, COURSES[m.course], STATUS[m.status || "active"], m.joinDate, m.entryFee, m.entryPaid ? "済" : "未", feeFor(m, k), isPaid(m.id, k) ? "済" : "未", m.nextMtg, lastMtg(m.id), openCare(m.id).length, m.email, m.phone, m.contact, m.memo, refName(m), CONTRACT[m.contractStatus || "none"], m.contractDate, m.goal, m.progress, warnCount(m.id)]);
+  const rows = membersArr().map(m => [m.salonNo, m.name, m.kana, m.nick, COURSES[m.course], STATUS[m.status || "active"], m.joinDate, m.entryFee, (e => e.st === "done" ? "済" : e.st === "part" ? `一部（残り${e.rest}円）` : "未")(entryInfo(m)), feeFor(m, k), isPaid(m.id, k) ? "済" : "未", m.nextMtg, lastMtg(m.id), openCare(m.id).length, m.email, m.phone, m.contact, m.memo, refName(m), CONTRACT[m.contractStatus || "none"], m.contractDate, m.goal, m.progress, warnCount(m.id)]);
   const csv = [head, ...rows].map(r => r.map(v => `"${String(v ?? "").replace(/"/g, '""')}"`).join(",")).join("\r\n");
   const a = document.createElement("a");
   a.href = URL.createObjectURL(new Blob(["﻿" + csv], { type: "text/csv" }));
