@@ -719,7 +719,7 @@ function renderPay() {
     .sort(byNo);
   const k = curYM();
   const unpaidCnt = months.map(mk => list.filter(m => monthApplies(m, mk) && !isPaid(m.id, mk) && mk <= k).length);
-  $("v-pay").innerHTML = pbar("支払い") + `
+  $("v-pay").innerHTML = pbar("支払い", `<button class="btn" onclick="openFeeBulk()">入会金・月額を一括設定</button>`) + `
   <div class="toolbar">
     <button class="btn" onclick="ui.payYear--;renderPay()">◀</button><b>${y}年</b><button class="btn" onclick="ui.payYear++;renderPay()">▶</button>
     <span class="hint" style="margin-left:8px">マスをタップすると「済／未」が切り替わります。入会前・退会後の月は対象外（−）です。</span>
@@ -912,6 +912,38 @@ async function saveLog(memberId, lid) {
 }
 function delLog(lid) {
   confirmBox("この対応記録を削除しますか？", async () => { delete state.logs[lid]; render(); toast("削除しました"); await save("DELETE", `logs/${lid}`); });
+}
+
+/* ---------- 入会金・月額の一括設定 ---------- */
+function openFeeBulk() {
+  const all = membersArr().filter(m => m.status !== "left");
+  const noEntry = all.filter(m => m.entryFee == null || m.entryFee === "").length, noFee = all.filter(m => m.fee == null || m.fee === "").length;
+  modal(`<h3>入会金・月額を一括設定</h3>
+    <p class="hint">退会済みの会員は対象外です（対象：${all.length}人）。支払い済み・未払いのチェックはそのまま残ります。</p>
+    <div class="f2"><div class="f"><label>入会金（円）</label><input id="fbEntry" type="number" inputmode="numeric" value="1000000"></div>
+    <div class="f"><label>月額（円）</label><input id="fbFee" type="number" inputmode="numeric" value="30000"></div></div>
+    <div class="f"><label>入れる相手</label><select id="fbScope"><option value="empty">まだ入力していない人だけ（入会金 未入力${noEntry}人・月額 未入力${noFee}人）</option><option value="all">全員（入力済みの金額も上書き）</option></select></div>
+    <div class="hint">空欄にした項目は変更しません。</div>
+    <div class="mact"><button class="btn" onclick="closeModal()">キャンセル</button><button class="btn pri" onclick="doFeeBulk()">設定する</button></div>`);
+}
+function doFeeBulk() {
+  const e = $("fbEntry").value, f = $("fbFee").value, all = $("fbScope").value === "all";
+  if (e === "" && f === "") { alert("入会金か月額を入力してください"); return; }
+  const patches = {};
+  membersArr().filter(m => m.status !== "left").forEach(m => {
+    const p = {};
+    if (e !== "" && (all || m.entryFee == null || m.entryFee === "")) p.entryFee = Number(e);
+    if (f !== "" && (all || m.fee == null || m.fee === "")) p.fee = Number(f);
+    if (Object.keys(p).length) patches[m.id] = p;
+  });
+  const n = Object.keys(patches).length;
+  if (!n) { alert("変更する会員はいませんでした"); return; }
+  confirmBox(`${n}人の${e !== "" ? `入会金を${Number(e).toLocaleString()}円` : ""}${e !== "" && f !== "" ? "、" : ""}${f !== "" ? `月額を${Number(f).toLocaleString()}円` : ""}にします。よろしいですか？`, async () => {
+    for (const [id, p] of Object.entries(patches)) Object.assign(state.members[id], p);
+    render(); toast(`${n}人分を設定しました`);
+    const body = {}; for (const [id, p] of Object.entries(patches)) for (const [k, v] of Object.entries(p)) body[`${id}/${k}`] = v;
+    await save("PATCH", "members", body);
+  });
 }
 
 /* ---------- 操作 ---------- */
