@@ -180,6 +180,9 @@ h3{font-size:15px;margin:0 0 8px}
 .rowlink:hover{background:#fbf8f1}
 .rowlink .nm{color:var(--ink)}
 .rowlink:hover .nm{color:var(--gold)}
+.pfee{font-size:10px;color:var(--sub);margin-top:2px;line-height:1}
+.pay .sumc{text-align:right;white-space:nowrap;padding-left:14px}
+.pay tr.ptotal td{background:#faf9f5;font-size:12px}
 /* ページ見出しバー */
 .pbar{display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin:0 0 16px}
 .pbar h1{font-size:19px;margin:0;font-weight:700;letter-spacing:.03em}
@@ -482,6 +485,17 @@ const lastLabel = (id, long) => lastMtg(id) ? (long ? fmtDY(lastMtg(id)) : fmtD(
 const nextLabel = (m, long) => m.nextMtg ? (long ? fmtDY(m.nextMtg) : fmtD(m.nextMtg)) + (m.nextMtgTime ? " " + m.nextMtgTime + "〜" : "") : "—";
 const openCare = id => meetingsOf(id).filter(x => x.care && !x.careDone);
 const isPaid = (id, k) => !!state.payments[id]?.[k];
+// 月額の変更履歴：feeHistory = [{ from: "YYYY-MM", fee }]。その月より前は基本の月額（m.fee）
+const histOf = m => (m.feeHistory ? Object.values(m.feeHistory) : []).filter(h => h && h.from).sort((a, b) => a.from.localeCompare(b.from));
+function feeFor(m, k) { let f = m.fee; for (const h of histOf(m)) if (h.from <= k) f = h.fee; return f == null || f === "" ? null : Number(f); }
+const paidAmt = (m, k) => { const v = state.payments[m.id]?.[k]; return typeof v === "number" ? v : v ? (feeFor(m, k) || 0) : 0; };
+const ymLabel = k => `${k.slice(0, 4)}年${Number(k.slice(5))}月`;
+function yearSums(m, y) {
+  const now = curYM(); let paid = 0, due = 0;
+  for (let i = 1; i <= 12; i++) { const k = `${y}-${String(i).padStart(2, "0")}`; if (!monthApplies(m, k)) continue;
+    if (isPaid(m.id, k)) paid += paidAmt(m, k); else if (k <= now) due += feeFor(m, k) || 0; }
+  return { paid, due };
+}
 function monthApplies(m, k) {
   // 入会月以降で、退会していない月だけ支払い対象にする
   if (m.joinDate && k < ym(m.joinDate)) return false;
@@ -574,7 +588,7 @@ function renderHome() {
         ${idle.length ? cut(idle, "idle").map(m => `<div class="row rowlink" onclick="openRow('${m.id}')"><div class="grow">${nm(m)} ${courseTag(m.course)}<div class="meta">前回：${lastLabel(m.id, true)}</div></div><button class="btn sm" onclick="event.stopPropagation();openMember('${m.id}')">次回MTGを入れる</button></div>`).join("") + more("idle", idle.length) : `<div class="empty">該当する会員はいません</div>`}
       </div>
       <div class="card"><h3>${Number(k.slice(5))}月分の月額 未払い<span class="cnt">${unpaid.length}</span></h3>
-        ${unpaid.length ? cut(unpaid, "unpaid").map(m => `<div class="row rowlink" onclick="openRow('${m.id}')"><div class="grow">${nm(m)}<div class="meta">月額 ${yen(m.fee)}</div></div><button class="btn sm" onclick="event.stopPropagation();togglePay('${m.id}','${k}')">支払い済みにする</button></div>`).join("") + more("unpaid", unpaid.length) : `<div class="empty">全員支払い済みです</div>`}
+        ${unpaid.length ? cut(unpaid, "unpaid").map(m => `<div class="row rowlink" onclick="openRow('${m.id}')"><div class="grow">${nm(m)}<div class="meta">月額 ${yen(feeFor(m, k))}</div></div><button class="btn sm" onclick="event.stopPropagation();togglePay('${m.id}','${k}')">支払い済みにする</button></div>`).join("") + more("unpaid", unpaid.length) : `<div class="empty">全員支払い済みです</div>`}
       </div>
     </div>
   </div>`;
@@ -654,7 +668,12 @@ function renderDetail() {
       <dt>コース</dt><dd>${courseTag(m.course)}</dd>
       <dt>入会日</dt><dd>${fmtDY(m.joinDate)}</dd>
       <dt>入会金</dt><dd>${yen(m.entryFee)}　${m.entryPaid ? `<span class="tag t-green">支払い済み</span>` : `<span class="tag t-red">未払い</span>`} <button class="btn sm" onclick="toggleEntry('${id}')">${m.entryPaid ? "未払いに戻す" : "支払い済みにする"}</button></dd>
-      <dt>月額</dt><dd>${yen(m.fee)}</dd>
+      <dt>月額</dt><dd><b>${yen(feeFor(m, curYM()))}</b><span class="meta">（${Number(curYM().slice(5))}月分）</span>${(() => { const h = histOf(m); if (!h.length) return "";
+        const seg = []; let prev = m.fee; const first = h[0].from;
+        if (prev != null && prev !== "") seg.push(`〜${ymLabel(prevYM(first))}：${Number(prev).toLocaleString()}円`);
+        h.forEach((x, i) => seg.push(`${ymLabel(x.from)}〜${h[i + 1] ? ymLabel(prevYM(h[i + 1].from)) : ""}：${Number(x.fee).toLocaleString()}円`));
+        return `<div class="meta">${seg.join("　→　")}</div>`; })()}</dd>
+      ${(() => { const y = Number(curYM().slice(0, 4)), t = yearSums({ id, ...m }, y); return `<dt>${y}年の支払い</dt><dd>${t.paid.toLocaleString()}円${t.due ? `　<span class="red">未払い ${t.due.toLocaleString()}円</span>` : ""}</dd>`; })()}
       <dt>次回MTG</dt><dd><b>${nextLabel(m, true)}</b></dd>
       ${m.email ? `<dt>メール</dt><dd><a href="mailto:${esc(m.email)}">${esc(m.email)}</a></dd>` : ""}
       ${m.phone ? `<dt>電話番号</dt><dd><a href="tel:${esc(m.phone)}">${esc(m.phone)}</a></dd>` : ""}
@@ -667,10 +686,10 @@ function renderDetail() {
       ${m.progress ? `<dt>今の状況</dt><dd style="white-space:pre-wrap">${esc(m.progress)}${m.progressAt ? `<span class="meta">　（${fmtD(m.progressAt)}更新）</span>` : ""}</dd>` : ""}
       ${m.memo ? `<dt>メモ</dt><dd style="white-space:pre-wrap">${esc(m.memo)}</dd>` : ""}
     </dl>
-    <div class="lbl hint" style="margin-top:12px">月額の支払い（直近6か月・タップで切り替え）</div>
+    <div class="lbl hint" style="margin-top:12px">月額の支払い（直近6か月・「未」をタップで支払い済み、「済」をタップで金額の修正）</div>
     <div class="strip">${months.map(k => {
       const na = !monthApplies(m, k), p = isPaid(id, k);
-      return `<div class="m"><button class="pc ${na ? "na" : p ? "paid" : "unpaid"}" ${na ? "disabled" : `onclick="togglePay('${id}','${k}')"`}>${na ? "−" : p ? "済" : "未"}</button><div>${Number(k.slice(5))}月</div></div>`;
+      return `<div class="m"><button class="pc ${na ? "na" : p ? "paid" : "unpaid"}" ${na ? "disabled" : `onclick="togglePay('${id}','${k}')"`}>${na ? "−" : p ? "済" : "未"}</button><div>${Number(k.slice(5))}月</div>${!na && (p || feeFor(m, k) != null) ? `<div class="pfee">${((p ? paidAmt({ id, ...m }, k) : feeFor(m, k)) / 10000)}万</div>` : ""}</div>`;
     }).join("")}</div>
   </div>
   ${["leaving", "left"].includes(m.status) ? `<div class="card" id="d-leave" style="border-color:#f0d9b5;scroll-margin-top:80px">
@@ -722,16 +741,21 @@ function renderPay() {
   $("v-pay").innerHTML = pbar("支払い", `<button class="btn" onclick="openFeeBulk()">入会金・月額を一括設定</button>`) + `
   <div class="toolbar">
     <button class="btn" onclick="ui.payYear--;renderPay()">◀</button><b>${y}年</b><button class="btn" onclick="ui.payYear++;renderPay()">▶</button>
-    <span class="hint" style="margin-left:8px">マスをタップすると「済／未」が切り替わります。入会前・退会後の月は対象外（−）です。</span>
+    <span class="hint" style="margin-left:8px">「未」をタップで支払い済みに。「済」をタップすると金額の修正・未払いに戻すができます。入会前・退会後の月は対象外（−）です。</span>
   </div>
   ${list.length ? `<div class="scroll"><table class="tbl pay">
-    <tr><th class="nmc">氏名</th><th>入会金</th>${months.map(mk => `<th>${Number(mk.slice(5))}月</th>`).join("")}</tr>
+    <tr><th class="nmc">氏名</th><th>入会金</th>${months.map(mk => `<th>${Number(mk.slice(5))}月</th>`).join("")}<th class="sumc">${y}年 支払い合計</th><th class="sumc">未払い額</th></tr>
     ${list.map(m => `<tr><td class="nmc"><span class="nm" style="cursor:pointer" onclick="go('detail','${m.id}')">${esc(m.name)}</span></td>
       <td><button class="pc ${m.entryPaid ? "paid" : "unpaid"}" onclick="toggleEntry('${m.id}')">${m.entryPaid ? "済" : "未"}</button></td>
       ${months.map(mk => { const na = !monthApplies(m, mk), p = isPaid(m.id, mk);
-        return `<td><button class="pc ${na ? "na" : p ? "paid" : mk > k ? "" : "unpaid"}" ${na ? "disabled" : `onclick="togglePay('${m.id}','${mk}')"`}>${na ? "−" : p ? "済" : mk > k ? "" : "未"}</button></td>`; }).join("")}
+        const f = na ? null : feeFor(m, mk);
+        return `<td><button class="pc ${na ? "na" : p ? "paid" : mk > k ? "" : "unpaid"}" title="${na ? "" : p ? "支払い " + paidAmt(m, mk).toLocaleString() + "円" : "月額 " + (f == null ? "未設定" : f.toLocaleString() + "円")}" ${na ? "disabled" : `onclick="togglePay('${m.id}','${mk}')"`}>${na ? "−" : p ? "済" : mk > k ? "" : "未"}</button>${!na && f != null ? `<div class="pfee">${(p ? paidAmt(m, mk) : f) / 10000}万</div>` : ""}</td>`; }).join("")}
+      ${(() => { const t = yearSums(m, y); return `<td class="sumc"><b>${t.paid.toLocaleString()}</b></td><td class="sumc ${t.due ? "red" : ""}">${t.due ? t.due.toLocaleString() : "—"}</td>`; })()}
     </tr>`).join("")}
-    <tr><td class="nmc hint">未払い人数</td><td></td>${unpaidCnt.map(n => `<td class="hint">${n || ""}</td>`).join("")}</tr>
+    ${(() => { const mp = months.map(mk => list.reduce((a, m) => a + (monthApplies(m, mk) && isPaid(m.id, mk) ? paidAmt(m, mk) : 0), 0));
+      const tp = list.reduce((a, m) => a + yearSums(m, y).paid, 0), td = list.reduce((a, m) => a + yearSums(m, y).due, 0);
+      return `<tr class="ptotal"><td class="nmc"><b>月ごとの入金合計</b></td><td></td>${mp.map(v => `<td>${v ? (v / 10000).toLocaleString() + "万" : ""}</td>`).join("")}<td class="sumc"><b>${tp.toLocaleString()}</b></td><td class="sumc red">${td ? td.toLocaleString() : "—"}</td></tr>`; })()}
+    <tr><td class="nmc hint">未払い人数</td><td></td>${unpaidCnt.map(n => `<td class="hint">${n || ""}</td>`).join("")}<td></td><td></td></tr>
   </table></div>` : `<div class="card empty">会員が登録されていません</div>`}`;
 }
 
@@ -922,24 +946,28 @@ function openFeeBulk() {
     <p class="hint">退会済みの会員は対象外です（対象：${all.length}人）。支払い済み・未払いのチェックはそのまま残ります。</p>
     <div class="f2"><div class="f"><label>入会金（円）</label><input id="fbEntry" type="number" inputmode="numeric" value="1000000"></div>
     <div class="f"><label>月額（円）</label><input id="fbFee" type="number" inputmode="numeric" value="30000"></div></div>
-    <div class="f"><label>入れる相手</label><select id="fbScope"><option value="empty">まだ入力していない人だけ（入会金 未入力${noEntry}人・月額 未入力${noFee}人）</option><option value="all">全員（入力済みの金額も上書き）</option></select></div>
+    <div class="f"><label>何月分から（月額だけに使います）</label><input id="fbFrom" type="month" value="${feeBulkDefault()}"><div class="hint">月を入れると、全員の「月額の変更履歴」にその月から追加します。それより前の月は、それぞれの基本の月額のまま計算します（基本の月額が未入力の人には同じ金額を入れます）。月を空欄にすると、基本の月額を設定します。</div></div>
+    <div class="f"><label>入れる相手（入会金と、月を空欄にしたときの月額）</label><select id="fbScope"><option value="empty">まだ入力していない人だけ（入会金 未入力${noEntry}人・月額 未入力${noFee}人）</option><option value="all">全員（入力済みの金額も上書き）</option></select></div>
     <div class="hint">空欄にした項目は変更しません。</div>
     <div class="mact"><button class="btn" onclick="closeModal()">キャンセル</button><button class="btn pri" onclick="doFeeBulk()">設定する</button></div>`);
 }
+function feeBulkDefault() { return curYM() < "2026-12" ? "2026-12" : ""; }
 function doFeeBulk() {
-  const e = $("fbEntry").value, f = $("fbFee").value, all = $("fbScope").value === "all";
+  const e = $("fbEntry").value, f = $("fbFee").value, all = $("fbScope").value === "all", from = $("fbFrom").value;
   if (e === "" && f === "") { alert("入会金か月額を入力してください"); return; }
   const patches = {};
   membersArr().filter(m => m.status !== "left").forEach(m => {
     const p = {};
     if (e !== "" && (all || m.entryFee == null || m.entryFee === "")) p.entryFee = Number(e);
-    if (f !== "" && (all || m.fee == null || m.fee === "")) p.fee = Number(f);
+    if (f !== "" && from) { p[`feeHistory/${from}`] = { from, fee: Number(f) }; if (m.fee == null || m.fee === "") p.fee = Number(f); }
+    else if (f !== "" && (all || m.fee == null || m.fee === "")) p.fee = Number(f);
     if (Object.keys(p).length) patches[m.id] = p;
   });
   const n = Object.keys(patches).length;
   if (!n) { alert("変更する会員はいませんでした"); return; }
-  confirmBox(`${n}人の${e !== "" ? `入会金を${Number(e).toLocaleString()}円` : ""}${e !== "" && f !== "" ? "、" : ""}${f !== "" ? `月額を${Number(f).toLocaleString()}円` : ""}にします。よろしいですか？`, async () => {
-    for (const [id, p] of Object.entries(patches)) Object.assign(state.members[id], p);
+  confirmBox(`${n}人の${e !== "" ? `入会金を${Number(e).toLocaleString()}円` : ""}${e !== "" && f !== "" ? "、" : ""}${f !== "" ? `月額を${from ? ymLabel(from) + "分から" : ""}${Number(f).toLocaleString()}円` : ""}にします。よろしいですか？`, async () => {
+    for (const [id, p] of Object.entries(patches)) for (const [k2, v] of Object.entries(p)) {
+      if (k2.startsWith("feeHistory/")) { const mm = state.members[id]; mm.feeHistory = { ...(mm.feeHistory || {}), [v.from]: v }; } else state.members[id][k2] = v; }
     render(); toast(`${n}人分を設定しました`);
     const body = {}; for (const [id, p] of Object.entries(patches)) for (const [k, v] of Object.entries(p)) body[`${id}/${k}`] = v;
     await save("PATCH", "members", body);
@@ -947,12 +975,29 @@ function doFeeBulk() {
 }
 
 /* ---------- 操作 ---------- */
-async function togglePay(id, k) {
-  const v = !isPaid(id, k);
+function togglePay(id, k) {
+  if (isPaid(id, k)) return openPayCell(id, k);
+  const m = state.members[id], amt = feeFor(m, k);
   state.payments[id] = state.payments[id] || {};
-  if (v) state.payments[id][k] = true; else delete state.payments[id][k];
-  render(); toast(v ? "支払い済みにしました" : "未払いに戻しました");
-  await save(v ? "PUT" : "DELETE", `payments/${id}/${k}`, v ? true : undefined);
+  state.payments[id][k] = amt == null ? true : amt;
+  render(); toast(`${Number(k.slice(5))}月分を支払い済みにしました${amt != null ? `（${amt.toLocaleString()}円）` : ""}`);
+  save("PUT", `payments/${id}/${k}`, state.payments[id][k]);
+}
+function openPayCell(id, k) {
+  const m = { id, ...state.members[id] };
+  modal(`<h3>${esc(m.name)}　${ymLabel(k)}分</h3>
+    <p class="hint">この月の月額：${yen(feeFor(m, k))}</p>
+    <div class="f"><label>払った金額（円）</label><input id="pcAmt" type="number" inputmode="numeric" value="${paidAmt(m, k)}"></div>
+    <div class="mact"><button class="btn danger" style="margin-right:auto" onclick="unpay('${id}','${k}')">未払いに戻す</button><button class="btn" onclick="closeModal()">キャンセル</button><button class="btn pri" onclick="savePayAmt('${id}','${k}')">保存</button></div>`);
+}
+async function savePayAmt(id, k) {
+  const v = $("pcAmt").value; if (v === "") { alert("金額を入力してください"); return; }
+  state.payments[id][k] = Number(v); closeModal(); render(); toast("金額を保存しました");
+  await save("PUT", `payments/${id}/${k}`, Number(v));
+}
+async function unpay(id, k) {
+  delete state.payments[id][k]; closeModal(); render(); toast("未払いに戻しました");
+  await save("DELETE", `payments/${id}/${k}`);
 }
 async function toggleEntry(id) {
   const m = state.members[id]; m.entryPaid = !m.entryPaid;
@@ -979,6 +1024,8 @@ function confirmBox(msg, ok) {
   $("cfOk").onclick = () => { closeModal(); ok(); };
 }
 
+function fhRow(from, fee) { return `<div class="fhrow" style="display:flex;gap:6px;align-items:center;margin-bottom:6px"><input type="month" class="fhFrom" value="${esc(from)}" style="flex:1"><span class="meta">分から</span><input type="number" class="fhFee" inputmode="numeric" placeholder="金額" value="${esc(fee)}" style="flex:1"><span class="meta">円</span><button type="button" class="btn sm danger" onclick="this.parentElement.remove()">削除</button></div>`; }
+const prevYM = k => { const d = new Date(Number(k.slice(0, 4)), Number(k.slice(5)) - 2, 1); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`; };
 function openMember(id) {
   const m = id ? state.members[id] : { course: "none", status: "active", joinDate: todayStr() };
   modal(`<h3>${id ? "会員情報の編集" : "会員を追加"}</h3>
@@ -995,7 +1042,10 @@ function openMember(id) {
       <div class="f"><label>やり取りの記録（日付と事実だけを書くのがおすすめ）</label><textarea id="fLeaveLog" style="min-height:70px" placeholder="例：11/10 全体ミーティングで退会の意向を伝えられた">${esc(m.leaveLog)}</textarea></div>
     </div>
     <div class="f2"><div class="f"><label>入会金（円）</label><input id="fEntry" type="number" inputmode="numeric" value="${esc(m.entryFee)}"></div>
-    <div class="f"><label>月額（円）</label><input id="fFee" type="number" inputmode="numeric" value="${esc(m.fee)}"></div></div>
+    <div class="f"><label>月額（円）<span class="meta">　変更履歴がある場合は、最初の変更より前の金額</span></label><input id="fFee" type="number" inputmode="numeric" value="${esc(m.fee)}"></div></div>
+    <div class="f"><label>月額の変更履歴（何月分から、いくらに変わったか）</label>
+      <div id="fhList">${histOf(m).map(h => fhRow(h.from, h.fee)).join("")}</div>
+      <button type="button" class="btn sm" onclick="$('fhList').insertAdjacentHTML('beforeend', fhRow('', ''))">＋ 金額の変更を追加</button></div>
     <div class="f chk"><input type="checkbox" id="fEntryPaid" ${m.entryPaid ? "checked" : ""}><label for="fEntryPaid" style="margin:0;color:inherit;font-size:14px">入会金は支払い済み</label></div>
     <div class="f2"><div class="f"><label>次回ミーティング日</label><input id="fNext" type="date" value="${esc(m.nextMtg)}"></div>
     <div class="f"><label>開始時刻</label><input id="fNextTime" type="time" value="${esc(m.nextMtgTime)}"></div></div>
@@ -1025,6 +1075,7 @@ async function saveMember(id) {
     joinDate: $("fJoin").value, status: $("fStatus").value, leftDate: ["left", "leaving"].includes($("fStatus").value) ? $("fLeft").value : "",
     leaveReason: $("fLeaveReason").value.trim(), leaveLog: $("fLeaveLog").value.trim(),
     entryFee: num($("fEntry").value), fee: num($("fFee").value), entryPaid: $("fEntryPaid").checked,
+    feeHistory: (() => { const o = {}; document.querySelectorAll(".fhrow").forEach(r => { const f = r.querySelector(".fhFrom").value, v = r.querySelector(".fhFee").value; if (f && v !== "") o[f] = { from: f, fee: Number(v) }; }); return Object.keys(o).length ? o : null; })(),
     nextMtg: $("fNext").value, nextMtgTime: $("fNext").value ? $("fNextTime").value : "", contact: $("fContact").value.trim(), memo: $("fMemo").value.trim(), updatedAt: Date.now(),
     referrerId: ["", "__other"].includes($("fRefSel").value) ? "" : $("fRefSel").value,
     referrer: $("fRefSel").value === "__other" ? $("fRef").value.trim() : "", contractStatus: $("fContract").value, contractDate: $("fContractDate").value,
@@ -1194,7 +1245,7 @@ async function doBulk() {
 function exportCSV() {
   const k = curYM();
   const head = ["サロンNo", "氏名", "ふりがな", "サロン名", "コース", "状態", "入会日", "入会金", "入会金支払い", "月額", `${k}支払い`, "次回MTG", "前回MTG", "運営側でやること（未対応）", "メール", "電話番号", "LINE名など", "メモ", "紹介者", "契約書", "締結日", "目標", "今の状況", "注意・違反の件数"];
-  const rows = membersArr().map(m => [m.salonNo, m.name, m.kana, m.nick, COURSES[m.course], STATUS[m.status || "active"], m.joinDate, m.entryFee, m.entryPaid ? "済" : "未", m.fee, isPaid(m.id, k) ? "済" : "未", m.nextMtg, lastMtg(m.id), openCare(m.id).length, m.email, m.phone, m.contact, m.memo, refName(m), CONTRACT[m.contractStatus || "none"], m.contractDate, m.goal, m.progress, warnCount(m.id)]);
+  const rows = membersArr().map(m => [m.salonNo, m.name, m.kana, m.nick, COURSES[m.course], STATUS[m.status || "active"], m.joinDate, m.entryFee, m.entryPaid ? "済" : "未", feeFor(m, k), isPaid(m.id, k) ? "済" : "未", m.nextMtg, lastMtg(m.id), openCare(m.id).length, m.email, m.phone, m.contact, m.memo, refName(m), CONTRACT[m.contractStatus || "none"], m.contractDate, m.goal, m.progress, warnCount(m.id)]);
   const csv = [head, ...rows].map(r => r.map(v => `"${String(v ?? "").replace(/"/g, '""')}"`).join(",")).join("\r\n");
   const a = document.createElement("a");
   a.href = URL.createObjectURL(new Blob(["﻿" + csv], { type: "text/csv" }));
