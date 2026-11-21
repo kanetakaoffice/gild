@@ -176,6 +176,10 @@ h3{font-size:15px;margin:0 0 8px}
 .card.arr.open .arrbody{display:block}
 .card.arr{margin-bottom:8px}
 @media print{.arrbody{display:block!important}.chev{display:none}}
+.rowlink{cursor:pointer;border-radius:6px;margin:0 -8px;padding-left:8px;padding-right:8px;position:relative}
+.rowlink:hover{background:#fbf8f1}
+.rowlink .nm{color:var(--ink)}
+.rowlink:hover .nm{color:var(--gold)}
 /* ページ見出しバー */
 .pbar{display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin:0 0 16px}
 .pbar h1{font-size:19px;margin:0;font-weight:700;letter-spacing:.03em}
@@ -487,6 +491,7 @@ function monthApplies(m, k) {
 }
 
 /* ---------- 画面切り替え ---------- */
+function openRow(id, anchor) { go("detail", id); if (anchor) setTimeout(() => document.getElementById(anchor)?.scrollIntoView({ behavior: "smooth", block: "start" }), 60); }
 function go(tab, id) {
   ui.tab = tab; if (id) ui.detailId = id;
   document.querySelectorAll("nav button").forEach(b => b.classList.toggle("on", b.dataset.tab === (tab === "detail" ? "members" : tab)));
@@ -513,17 +518,17 @@ function renderHome() {
   const active = act.filter(m => (m.status || "active") === "active");
   const cares = [];
   act.forEach(m => openCare(m.id).forEach(x => cares.push({ m, x })));
-  cares.sort((a, b) => (b.x.date || "").localeCompare(a.x.date || ""));
+  cares.sort((a, b) => (b.x.date || "").localeCompare(a.x.date || "") || byNo(a.m, b.m));
   const k = curYM();
   const unpaid = act.filter(m => ["active", "leaving", undefined].includes(m.status) && monthApplies(m, k) && !isPaid(m.id, k)).sort(byNo);
-  const leaving = act.filter(m => m.status === "leaving").sort((a, b) => (a.leftDate || "9999").localeCompare(b.leftDate || "9999"));
+  const leaving = act.filter(m => m.status === "leaving").sort((a, b) => (a.leftDate || "9999").localeCompare(b.leftDate || "9999") || byNo(a, b));
   const idle = active.filter(m => !m.nextMtg && (!hasMtg(m.id) || (lastMtg(m.id) && daysFrom(lastMtg(m.id)) <= -CONFIG.idleDays))).sort(byNo);
-  const sched = act.filter(m => m.nextMtg && daysFrom(m.nextMtg) <= 6).sort((a, b) => (a.nextMtg + (a.nextMtgTime || "99")).localeCompare(b.nextMtg + (b.nextMtgTime || "99")));
+  const sched = act.filter(m => m.nextMtg && daysFrom(m.nextMtg) <= 6).sort((a, b) => (a.nextMtg + (a.nextMtgTime || "99")).localeCompare(b.nextMtg + (b.nextMtgTime || "99")) || byNo(a, b));
   const overdue = sched.filter(m => daysFrom(m.nextMtg) < 0), week = sched.filter(m => daysFrom(m.nextMtg) >= 0);
   const later = act.filter(m => m.nextMtg && daysFrom(m.nextMtg) > 6).length;
   const arrAll = Object.values(state.arrears), arrOpen = arrAll.filter(isOpen), arrTotal = arrOpen.reduce((s2, x) => s2 + arrAmt(x), 0);
   const ex = ui.homeEx || {};
-  const nm = m => `<span class="nm" onclick="go('detail','${m.id}')">${esc(m.name)}</span>${m.nick ? ` <span class="meta">（${esc(m.nick)}）</span>` : ""}`;
+  const nm = m => `<span class="nm">${esc(m.name)}</span>${m.nick ? ` <span class="meta">（${esc(m.nick)}）</span>` : ""}`;
   const more = (key, n, lim = 5) => n > lim ? `<div style="text-align:center;margin-top:8px"><button class="btn sm" onclick="ui.homeEx={...(ui.homeEx||{}),${key}:${!ex[key]}};renderHome()">${ex[key] ? "閉じる" : `すべて見る（${n}件）`}</button></div>` : "";
   const cut = (arr, key, lim = 5) => ex[key] ? arr : arr.slice(0, lim);
   const stat = (label, num, unit, sub, onclick, cls = "") => `<div class="card stat hstat" onclick="${onclick}"><div class="hint">${label}</div><div class="num ${cls}">${num}<small>${unit}</small></div><div class="meta">${sub}</div></div>`;
@@ -532,12 +537,12 @@ function renderHome() {
     const c = openCare(m.id), last = meetingsOf(m.id)[0];
     const n = daysFrom(m.nextMtg);
     const badge = n < 0 ? `<span class="tag t-red">${-n}日過ぎています</span>` : n === 0 ? `<span class="tag t-red">今日</span>` : n === 1 ? `<span class="tag t-orange">明日</span>` : `<span class="tag t-gray">あと${n}日</span>`;
-    return `<div class="row" style="align-items:flex-start"><div class="mtime">${m.nextMtgTime || `<span class="meta" style="font-weight:400">時刻未定</span>`}</div><div class="grow">${nm(m)} ${courseTag(m.course)}
+    return `<div class="row rowlink" style="align-items:flex-start" onclick="openRow('${m.id}','d-mtg')"><div class="mtime">${m.nextMtgTime || `<span class="meta" style="font-weight:400">時刻未定</span>`}</div><div class="grow">${nm(m)} ${courseTag(m.course)}
       <div class="meta">${n < 0 ? fmtD(m.nextMtg) + "の予定　" : ""}前回：${lastLabel(m.id)}${last && last.host ? "（" + esc(last.host) + "）" : ""}</div>
       ${c.length ? `<div class="carebox"><b>運営</b> ${esc(c[0].care.length > 70 ? c[0].care.slice(0, 70) + "…" : c[0].care)}${c.length > 1 ? `<span class="meta">　ほか${c.length - 1}件</span>` : ""}</div>` : ""}
       ${m.goal ? `<div class="meta">目標：${esc(m.goal)}</div>` : ""}
       ${last && last.next ? `<div class="meta">前回の宿題：${esc(last.next.length > 50 ? last.next.slice(0, 50) + "…" : last.next)}</div>` : ""}
-      </div><div style="display:flex;flex-direction:column;gap:6px;align-items:flex-end">${badge}<button class="btn sm" onclick="openMeeting('${m.id}')">記録を追加</button></div></div>`;
+      </div><div style="display:flex;flex-direction:column;gap:6px;align-items:flex-end">${badge}<button class="btn sm" onclick="event.stopPropagation();openMeeting('${m.id}')">記録を追加</button></div></div>`;
   };
   // 今週の予定を日ごとにまとめる
   const days = {}; week.forEach(m => (days[m.nextMtg] = days[m.nextMtg] || []).push(m));
@@ -555,21 +560,21 @@ function renderHome() {
         ${overdue.length ? `<div class="dayh red">予定日を過ぎています（記録を追加するか、次回MTGを入れ直してください）</div>${overdue.map(mtgRow).join("")}` : ""}
         ${Object.keys(days).length ? Object.entries(days).map(([d, ms]) => `<div class="dayh">${daysFrom(d) <= 1 ? dayHead(d) + `<span class="meta">　${fmtDY(d)}</span>` : fmtDY(d)}</div>${ms.map(mtgRow).join("")}`).join("") : (overdue.length ? "" : `<div class="empty">今週の予定はありません${later ? `（それ以降の予定 ${later}件）` : ""}</div>`)}
       </div>
-      ${leaving.length ? `<div class="card"><h3>退会予定<span class="cnt">${leaving.length}</span><span class="meta" style="font-weight:400;margin-left:8px">予定日が近い順</span></h3>
+      ${leaving.length ? `<div class="card"><h3>退会予定<span class="cnt">${leaving.length}</span><span class="meta" style="font-weight:400;margin-left:8px">予定日が近い順（未定はサロンNo順）</span></h3>
         ${leaving.map(m => { const n = m.leftDate ? daysFrom(m.leftDate) : null, done = leaveDone(m), all = Object.keys(LEAVE_CHECKS).length;
-          return `<div class="row"><div class="grow">${nm(m)}<div class="meta">退会予定日：${m.leftDate ? fmtDY(m.leftDate) : "未定"}${m.leaveReason ? "　" + esc(m.leaveReason) : ""}</div></div>
+          return `<div class="row rowlink" onclick="openRow('${m.id}','d-leave')"><div class="grow">${nm(m)}<div class="meta">退会予定日：${m.leftDate ? fmtDY(m.leftDate) : "未定"}${m.leaveReason ? "　" + esc(m.leaveReason) : ""}</div></div>
           ${n !== null && n < 0 ? `<span class="tag t-red">予定日を過ぎています</span>` : ""}<span class="tag ${done === all ? "t-green" : "t-orange"}">手続き ${done}/${all}</span></div>`; }).join("")}
       </div>` : ""}
     </div>
     <div>
       <div class="card" id="hCare"><h3>運営側でやること（未対応）<span class="cnt">${cares.length}</span></h3>
-        ${cares.length ? cut(cares, "care").map(({ m, x }) => `<div class="row"><div class="grow">${nm(m)}<div class="meta">${x.date ? fmtD(x.date) : "日付不明"} のミーティング</div><div style="white-space:pre-wrap;font-size:13px;margin-top:2px">${esc(x.care)}</div></div><button class="btn sm" onclick="toggleCare('${x.id}')">対応済み</button></div>`).join("") + more("care", cares.length) : `<div class="empty">未対応のものはありません</div>`}
+        ${cares.length ? cut(cares, "care").map(({ m, x }) => `<div class="row rowlink" onclick="openRow('${m.id}','d-mtg')"><div class="grow">${nm(m)}<div class="meta">${x.date ? fmtD(x.date) : "日付不明"} のミーティング</div><div style="white-space:pre-wrap;font-size:13px;margin-top:2px">${esc(x.care)}</div></div><button class="btn sm" onclick="event.stopPropagation();toggleCare('${x.id}')">対応済み</button></div>`).join("") + more("care", cares.length) : `<div class="empty">未対応のものはありません</div>`}
       </div>
       <div class="card"><h3>フォローが必要<span class="cnt">${idle.length}</span><span class="meta" style="font-weight:400;margin-left:8px">${CONFIG.idleDays}日以上ミーティングなし・次回未定</span></h3>
-        ${idle.length ? cut(idle, "idle").map(m => `<div class="row"><div class="grow">${nm(m)} ${courseTag(m.course)}<div class="meta">前回：${lastLabel(m.id, true)}</div></div><button class="btn sm" onclick="openMember('${m.id}')">次回MTGを入れる</button></div>`).join("") + more("idle", idle.length) : `<div class="empty">該当する会員はいません</div>`}
+        ${idle.length ? cut(idle, "idle").map(m => `<div class="row rowlink" onclick="openRow('${m.id}')"><div class="grow">${nm(m)} ${courseTag(m.course)}<div class="meta">前回：${lastLabel(m.id, true)}</div></div><button class="btn sm" onclick="event.stopPropagation();openMember('${m.id}')">次回MTGを入れる</button></div>`).join("") + more("idle", idle.length) : `<div class="empty">該当する会員はいません</div>`}
       </div>
       <div class="card"><h3>${Number(k.slice(5))}月分の月額 未払い<span class="cnt">${unpaid.length}</span></h3>
-        ${unpaid.length ? cut(unpaid, "unpaid").map(m => `<div class="row"><div class="grow">${nm(m)}<div class="meta">月額 ${yen(m.fee)}</div></div><button class="btn sm" onclick="togglePay('${m.id}','${k}')">支払い済みにする</button></div>`).join("") + more("unpaid", unpaid.length) : `<div class="empty">全員支払い済みです</div>`}
+        ${unpaid.length ? cut(unpaid, "unpaid").map(m => `<div class="row rowlink" onclick="openRow('${m.id}')"><div class="grow">${nm(m)}<div class="meta">月額 ${yen(m.fee)}</div></div><button class="btn sm" onclick="event.stopPropagation();togglePay('${m.id}','${k}')">支払い済みにする</button></div>`).join("") + more("unpaid", unpaid.length) : `<div class="empty">全員支払い済みです</div>`}
       </div>
     </div>
   </div>`;
@@ -668,7 +673,7 @@ function renderDetail() {
       return `<div class="m"><button class="pc ${na ? "na" : p ? "paid" : "unpaid"}" ${na ? "disabled" : `onclick="togglePay('${id}','${k}')"`}>${na ? "−" : p ? "済" : "未"}</button><div>${Number(k.slice(5))}月</div></div>`;
     }).join("")}</div>
   </div>
-  ${["leaving", "left"].includes(m.status) ? `<div class="card" style="border-color:#f0d9b5">
+  ${["leaving", "left"].includes(m.status) ? `<div class="card" id="d-leave" style="border-color:#f0d9b5;scroll-margin-top:80px">
     <div class="dhead"><h3 style="margin:0">退会手続き <span class="tag t-orange">${leaveDone(m)} / ${Object.keys(LEAVE_CHECKS).length} 完了</span></h3>
       ${m.status === "leaving" ? `<button class="btn sm" style="margin-left:auto" onclick="finishLeave('${id}')">退会にする</button>` : ""}</div>
     <dl class="kv">
@@ -695,7 +700,7 @@ function renderDetail() {
         <td><button class="btn sm" onclick="openLog('${id}','${x.id}')">編集</button></td></tr>`).join("")}</table></div>` : `<div class="empty">記録はありません</div>`}
     <div class="hint" style="margin-top:6px">日付と事実だけを書くのがおすすめです（推測や評価は書かない）。</div>
   </div>`; })()}
-  <h2>ミーティング記録 <span class="hint">${mt.length}件</span></h2>
+  <h2 id="d-mtg" style="scroll-margin-top:80px">ミーティング記録 <span class="hint">${mt.length}件</span></h2>
   ${mt.length ? mt.map(x => `
     <div class="mtg">
       <div class="top"><span class="dt">${x.date ? fmtDY(x.date) : `<span class="tag t-orange">日付不明</span>`}</span>${x.host ? `<span class="tag t-gray">${esc(x.host)}</span>` : ""}
