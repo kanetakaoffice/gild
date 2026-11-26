@@ -1012,9 +1012,7 @@ const FORM_MSG_DEFAULT = `お疲れ様です。
 下のURLを開いて、「該当なし・該当あり・確認中」のどれかを選び、該当がある場合は内容を入力して送信してください。
 {URL}
 
-回答は11/30（月）午前中までにお願いします。
-期限までにご回答がない場合は、現時点で該当なしとして集計を進めます。期限後のお申し出については、個別に対応を判断させていただきますので、あらかじめご了承ください。
-よろしくお願いします。`;
+回答は11/30（月）午前中までにお願いします。`;
 const normPhone = p => String(p || "").replace(/[０-９]/g, c => String.fromCharCode(c.charCodeAt(0) - 0xFEE0)).replace(/\D/g, "");
 async function phoneHash(p) { const b = await crypto.subtle.digest("SHA-256", new TextEncoder().encode("gild:" + normPhone(p))); return Array.from(new Uint8Array(b), x => x.toString(16).padStart(2, "0")).join(""); }
 async function ensureLookup() {
@@ -1039,14 +1037,14 @@ async function openFormLinks() {
   await ensureTokens(); await ensureLookup();
   const noPhone = membersArr().filter(m => m.status !== "left" && normPhone(m.phone).length < 10).sort(byNo);
   const common = FORM_URL().replace(/\?t=$/, "");
-  let cmsg = ""; try { cmsg = localStorage.getItem("gildFormMsgCommon") || ""; } catch (e) {}
+  let cmsg = ""; try { cmsg = localStorage.getItem("gildFormMsgCommon2") || ""; } catch (e) {}
   const list = membersArr().filter(m => m.status !== "left").sort(byNo);
-  let msg = ""; try { msg = localStorage.getItem("gildFormMsg") || ""; } catch (e) {}
+  let msg = ""; try { msg = localStorage.getItem("gildFormMsg2") || ""; } catch (e) {}
   modal(`<h3>回答フォームのURL</h3>
     <div class="card" style="background:#faf9f5;margin-bottom:14px">
       <b>共通のURL（全員に同じURLを送れます）</b>
       <p class="hint" style="margin:4px 0 8px">開くと電話番号の入力を求められ、会員管理に登録されている電話番号と合った人だけが、自分の回答画面に進めます。</p>
-      <div class="f"><textarea id="flMsgC" style="min-height:150px" oninput="try{localStorage.setItem('gildFormMsgCommon',this.value)}catch(e){}">${esc(cmsg || FORM_MSG_DEFAULT.replace("下のURLを開いて、", "下のURLを開き、登録している電話番号を入力してから、"))}</textarea></div>
+      <div class="f"><textarea id="flMsgC" style="min-height:150px" oninput="try{localStorage.setItem('gildFormMsgCommon2',this.value)}catch(e){}">${esc(cmsg || FORM_MSG_DEFAULT.replace("下のURLを開いて、", "下のURLを開き、登録している電話番号を入力してから、"))}</textarea></div>
       <button class="btn sm gold" onclick="copyText($('flMsgC').value.replace('{URL}','${common}'),this)">共通URLの文章をコピー</button> <button class="btn sm" onclick="copyText('${common}',this)">URLだけ</button>
       ${noPhone.length ? `<div class="err" style="margin-top:8px">電話番号が登録されていない会員（${noPhone.length}人）は共通URLを使えません。下の個別URLを送るか、会員ページで電話番号を登録してから開き直してください：${noPhone.map(m => esc(((m.salonNo || "") + " " + m.name).trim())).join("、")}</div>` : `<div class="meta" style="margin-top:8px">全員の電話番号が登録されています。</div>`}
     </div>
@@ -1056,7 +1054,7 @@ async function openFormLinks() {
       <button class="btn sm pri" onclick="saveFormCfg()">設定を保存</button>${state.formConfig?.deadline ? "" : ` <span class="meta">※まだ保存されていません。保存するとフォームに期限が表示されます</span>`}</div>
     <b>個別のURL（会員ごとに別のURLです）</b>
     <p class="hint">「文章をコピー」を押すと、その会員専用のURLが入った文章がコピーされます。それぞれの会員の個別LINEに貼り付けて送ってください。<b>URLを他の会員に送らないよう注意してください</b>（その人として回答できてしまいます）。</p>
-    <div class="f"><label>送る文章（{URL} の部分に、その会員のURLが入ります）</label><textarea id="flMsg" style="min-height:170px" oninput="try{localStorage.setItem('gildFormMsg',this.value)}catch(e){}">${esc(msg || FORM_MSG_DEFAULT)}</textarea></div>
+    <div class="f"><label>送る文章（{URL} の部分に、その会員のURLが入ります）</label><textarea id="flMsg" style="min-height:170px" oninput="try{localStorage.setItem('gildFormMsg2',this.value)}catch(e){}">${esc(msg || FORM_MSG_DEFAULT)}</textarea></div>
     <div style="max-height:340px;overflow:auto;border:1px solid var(--line);border-radius:8px"><table class="tbl" style="border:0">
       <tr><th>No</th><th>氏名（サロン名）</th><th>回答</th><th></th></tr>
       ${list.map(m => { const sb = subsOf(m.id), last = sb[sb.length - 1];
