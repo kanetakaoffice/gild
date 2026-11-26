@@ -1,0 +1,273 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex,nofollow">
+<title>GILD 未入金の確認</title>
+<style>
+:root{--bg:#f6f5f1;--card:#fff;--ink:#1d1d1b;--sub:#6b6a66;--line:#e4e1d8;--gold:#a8843f;--gold-soft:#f3ecdd;--red:#b54a3c;--green:#3f7d5a}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font-family:-apple-system,BlinkMacSystemFont,"Hiragino Sans","Hiragino Kaku Gothic ProN","Noto Sans JP",sans-serif;font-size:16px;line-height:1.7}
+header{background:var(--ink);color:#fff;padding:16px 20px}
+.logo{font-weight:700;letter-spacing:.18em;font-size:18px}.logo span{color:var(--gold)}
+.logo small{font-weight:400;letter-spacing:.05em;font-size:12px;color:#bbb;margin-left:8px}
+main{max-width:640px;margin:0 auto;padding:18px 16px 60px}
+.card{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:18px;margin-bottom:14px}
+h1{font-size:19px;margin:0 0 6px}
+h2{font-size:16px;margin:0 0 10px}
+.sub{color:var(--sub);font-size:14px}
+.choice{display:flex;flex-direction:column;gap:10px}
+.choice label{display:flex;gap:12px;align-items:flex-start;border:1px solid var(--line);border-radius:10px;padding:12px 14px;cursor:pointer;background:#fff}
+.choice input{margin-top:6px;transform:scale(1.25)}
+.choice label.on{border-color:var(--gold);background:var(--gold-soft)}
+.choice b{display:block}
+.item{border:1px solid var(--line);border-radius:10px;padding:12px;margin-bottom:10px;position:relative;background:#fcfbf8}
+.item .del{position:absolute;top:8px;right:8px;border:0;background:none;color:var(--red);font-size:13px}
+.f{margin-bottom:10px}
+.f label{display:block;font-size:13px;color:var(--sub);margin-bottom:3px}
+input[type=text],input[type=tel],input[type=number],input[type=date],select,textarea{width:100%;padding:10px 12px;border:1px solid var(--line);border-radius:8px;font:inherit;background:#fff;color:inherit}
+textarea{min-height:80px}
+.f2{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+button{font:inherit;cursor:pointer}
+.add{border:1px dashed var(--gold);background:#fff;color:var(--gold);border-radius:8px;padding:10px;width:100%}
+.send{background:var(--ink);color:#fff;border:0;border-radius:10px;padding:14px;width:100%;font-size:17px;font-weight:700}
+.send:disabled{opacity:.5}
+.err{color:var(--red);font-size:14px;min-height:20px;margin:6px 0}
+.hidden{display:none!important}
+pre{white-space:pre-wrap;font-family:inherit;background:#faf9f5;border:1px solid var(--line);border-radius:8px;padding:12px;font-size:14px}
+.line{background:#06c755;color:#fff;border:0;border-radius:10px;padding:14px;width:100%;font-weight:700;font-size:17px}
+.copy2{background:#fff;color:var(--ink);border:1px solid var(--line);border-radius:10px;padding:11px;width:100%}
+.prev{border:1px solid var(--line);border-radius:10px;padding:10px 12px;margin-bottom:10px;background:#fcfbf8}
+.prev .bt{display:flex;gap:8px;margin-top:8px}
+.prev .bt button{flex:1;padding:9px;border-radius:8px;font-size:14px}
+.ok{color:var(--green);font-weight:700}
+.confirm{border:1px solid var(--gold);background:var(--gold-soft);border-radius:10px;padding:12px 14px;margin-top:4px}
+.confirm .big{font-size:20px;font-weight:700;letter-spacing:.02em}
+@media (max-width:480px){.f2{grid-template-columns:1fr}}
+</style>
+</head>
+<body>
+<header><div class="logo">G<span>I</span>LD<small>未入金の確認</small></div></header>
+<main>
+  <div id="loading" class="card sub">読み込み中です…</div>
+  <div id="phoneView" class="card hidden">
+    <h1>本人確認</h1>
+    <p class="sub">GILDに登録している電話番号を入力してください。</p>
+    <div class="f"><input type="tel" id="phone" inputmode="tel" autocomplete="tel" placeholder="例：09012345678"></div>
+    <div id="pick" class="hidden" style="margin-bottom:10px"></div>
+    <div class="err" id="perr"></div>
+    <button class="send" id="pbtn" onclick="checkPhone()">次へ</button>
+    <p class="sub" style="font-size:13px;margin-top:10px">入力した電話番号は本人確認のためだけに使い、保存しません。</p>
+  </div>
+  <div id="bad" class="card hidden"><h1>このURLは使えません</h1><p class="sub">URLが途中で切れていないか確認してください。分からない場合は、運営までご連絡ください。</p></div>
+
+  <div id="formView" class="hidden">
+    <div id="prevCard" class="card hidden" style="border-color:var(--gold)">
+      <h2>送信済みの回答</h2>
+      <div id="prevList"></div>
+      <p class="sub" style="font-size:13px;margin:8px 0 0">追加や訂正がある場合は、下のフォームからもう一度送信してください。</p>
+    </div>
+    <div class="card">
+      <h1><span id="who"></span>さん</h1>
+      <p class="sub" style="margin:0">ハヤトさんの退任に伴い、MNPキャッシュバックや商品代金などで、まだ入金されていないものがないか確認しています。該当するものを選んで、内容を入力してください。</p>
+      <p class="sub" id="deadline" style="margin:8px 0 0"></p>
+    </div>
+
+    <div class="card">
+      <h2>1. 未入金はありますか？</h2>
+      <div class="choice" id="choice">
+        <label><input type="radio" name="ans" value="none"><span><b>該当なし</b><span class="sub">未入金のものはありません</span></span></label>
+        <label><input type="radio" name="ans" value="has"><span><b>該当あり</b><span class="sub">未入金のものがあります（下で内容を入力）</span></span></label>
+        <label><input type="radio" name="ans" value="checking"><span><b>確認中</b><span class="sub">ありそうだが、まだ詳細を確認しています</span></span></label>
+      </div>
+    </div>
+
+    <div id="hasArea" class="hidden">
+      <div class="card">
+        <h2>2. MNPキャッシュバックの未入金</h2>
+        <div id="mnpList"></div>
+        <button class="add" onclick="addMnp()">＋ MNPキャッシュバックを追加</button>
+      </div>
+      <div class="card">
+        <h2>3. 商品の未入金</h2>
+        <div id="prdList"></div>
+        <button class="add" onclick="addPrd()">＋ 商品を追加</button>
+      </div>
+    </div>
+
+    <div id="memoArea" class="card hidden">
+      <h2 id="memoTitle">補足（任意）</h2>
+      <textarea id="memo" placeholder="分かっていることや、やり取りの状況など"></textarea>
+    </div>
+
+    <div class="err" id="err"></div>
+    <button class="send" id="sendBtn" onclick="send()" disabled>送信する</button>
+    <p class="sub" style="text-align:center;margin-top:8px">送信した内容は、GILD運営（HAK・KANETAKAの代表）だけが確認します。</p>
+  </div>
+
+  <div id="doneView" class="hidden">
+    <div class="card">
+      <h1 class="ok">送信しました</h1>
+      <p class="sub" id="doneLead"></p>
+      <button class="line" onclick="sendLine()">LINEで送る</button>
+      <p class="sub" style="font-size:13px;margin:6px 0 14px">LINEが開いたら、<b>運営とのトーク</b>を選んで送信してください。</p>
+      <pre id="summary"></pre>
+      <button class="copy2" id="copyBtn" onclick="copySummary()">内容をコピーする</button>
+      <p class="sub" style="margin-top:14px">このURLをもう一度開くと、送った内容をいつでも確認・コピーできます。追加や訂正がある場合も、同じURLから送信できます。</p>
+    </div>
+  </div>
+</main>
+<script>
+const DB = "https://gild-members-default-rtdb.asia-southeast1.firebasedatabase.app";
+const DEADLINE = "11/30（月）午前中";
+const CARRIERS = ["docomo", "au", "SoftBank", "楽天モバイル", "ahamo", "povo", "LINEMO", "UQモバイル", "Y!mobile", "その他"];
+const $ = id => document.getElementById(id);
+const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+let token = new URLSearchParams(location.search).get("t") || "";
+let label = "";
+
+async function init() {
+  $("deadline").textContent = `回答は ${DEADLINE} までにお願いします。期限までにご回答がない場合は、現時点で該当なしとして集計を進めます。`;
+  if (!token) { $("loading").classList.add("hidden"); $("phoneView").classList.remove("hidden"); return; }
+  if (!/^[a-z0-9]{16,40}$/.test(token)) return showBad();
+  try {
+    const r = await fetch(`${DB}/gild/formTokens/${token}.json`);
+    const j = r.ok ? await r.json() : null;
+    if (!j || !j.memberId) return showBad();
+    label = j.label || "";
+    $("who").textContent = label || "会員";
+    loadPrev();
+    $("loading").classList.add("hidden"); $("formView").classList.remove("hidden");
+  } catch (e) { showBad(); }
+}
+let prevSubs = [];
+async function loadPrev() {
+  try {
+    const r = await fetch(`${DB}/gild/formSubs/${token}.json`);
+    const j = r.ok ? await r.json() : null;
+    prevSubs = Object.values(j || {}).filter(x => x && x.summary).sort((a, b) => b.at - a.at);
+  } catch (e) { prevSubs = []; }
+  if (!prevSubs.length) return;
+  $("prevList").innerHTML = prevSubs.map((x, i) => `<div class="prev"><div class="sub" style="font-size:13px">${new Date(x.at).toLocaleString("ja-JP")} に送信</div>
+    <pre style="margin:6px 0 0">${esc(x.summary)}</pre>
+    <div class="bt"><button class="line" style="font-size:14px;padding:9px" onclick="sendLine(prevSubs[${i}].summary)">LINEで送る</button><button class="copy2" onclick="copySummary(prevSubs[${i}].summary,this)">コピー</button></div></div>`).join("");
+  $("prevCard").classList.remove("hidden");
+}
+const normPhone = p => String(p || "").replace(/[０-９]/g, c => String.fromCharCode(c.charCodeAt(0) - 0xFEE0)).replace(/\D/g, "");
+async function phoneHash(p) { const b = await crypto.subtle.digest("SHA-256", new TextEncoder().encode("gild:" + normPhone(p))); return Array.from(new Uint8Array(b), x => x.toString(16).padStart(2, "0")).join(""); }
+let tries = 0;
+async function checkPhone() {
+  const ph = normPhone($("phone").value); $("perr").textContent = "";
+  if (ph.length < 10) { $("perr").textContent = "電話番号を数字で入力してください"; return; }
+  if (++tries > 8) { $("perr").textContent = "入力回数が多すぎます。運営までご連絡ください"; return; }
+  $("pbtn").disabled = true;
+  try {
+    const r = await fetch(`${DB}/gild/formLookup/${await phoneHash(ph)}.json`);
+    const j = r.ok ? await r.json() : null;
+    const ts = Object.entries(j || {});
+    if (!ts.length) { $("perr").textContent = "登録されている電話番号と一致しませんでした。番号を確認するか、運営までご連絡ください。"; $("pbtn").disabled = false; return; }
+    const one = ts.length === 1;
+    $("pick").innerHTML = `<div class="confirm"><div class="sub" style="font-size:13px">電話番号</div><div class="big">${esc(fmtPhone(ph))}</div>
+      <div class="sub" style="font-size:13px;margin-top:8px">サロンでの登録名</div>
+      ${one ? `<div class="big">${esc(ts[0][1] || "（サロン名なし）")}</div>` : `<div class="sub" style="font-size:13px">この電話番号で${ts.length}つのアカウントが登録されています。回答するサロン名を選んでください。</div>`}</div>
+      ${one ? `<p style="margin:12px 0 8px;font-weight:700">この内容で合っていますか？</p>
+        <button class="send" onclick="goToken('${ts[0][0]}')">はい、回答に進む</button>`
+      : `<div class="choice" style="margin-top:10px">${ts.map(([t, l]) => `<label onclick="goToken('${t}')"><input type="radio" name="pk"><span><b>${esc(l || "（サロン名なし）")}</b><span class="sub">このアカウントで回答する</span></span></label>`).join("")}</div>`}
+      <button class="copy2" style="margin-top:10px" onclick="resetPhone()">違う（電話番号を入力し直す）</button>
+      <p class="sub" style="font-size:13px;margin-top:8px">ご自身ではない場合や、サロン名が違う場合は、回答せずに運営までご連絡ください。</p>`;
+    $("pick").classList.remove("hidden"); $("pbtn").classList.add("hidden"); $("phone").disabled = true;
+  } catch (e) { $("perr").textContent = "確認できませんでした。通信状況を確認して、もう一度お試しください。"; $("pbtn").disabled = false; }
+}
+function fmtPhone(p) { return p.length === 11 ? `${p.slice(0, 3)}-${p.slice(3, 7)}-${p.slice(7)}` : p.length === 10 ? `${p.slice(0, 2)}-${p.slice(2, 6)}-${p.slice(6)}` : p; }
+function resetPhone() { $("pick").classList.add("hidden"); $("pbtn").classList.remove("hidden"); $("pbtn").disabled = false; $("phone").disabled = false; $("phone").value = ""; $("phone").focus(); }
+function goToken(t) {
+  token = t; history.replaceState(null, "", location.pathname + "?t=" + t);
+  $("phoneView").classList.add("hidden"); $("loading").classList.remove("hidden"); init();
+}
+function showBad() { $("loading").classList.add("hidden"); $("bad").classList.remove("hidden"); }
+
+document.addEventListener("change", e => {
+  if (e.target.name !== "ans") return;
+  document.querySelectorAll("#choice label").forEach(l => l.classList.toggle("on", l.querySelector("input").checked));
+  const v = e.target.value;
+  $("hasArea").classList.toggle("hidden", v !== "has");
+  $("memoArea").classList.toggle("hidden", v === "none");
+  $("memoTitle").textContent = v === "checking" ? "分かっている範囲で教えてください（任意）" : "補足（任意）";
+  if (v === "has" && !document.querySelector(".item")) addPrd();
+  $("sendBtn").disabled = false;
+});
+
+function addMnp() {
+  $("mnpList").insertAdjacentHTML("beforeend", `<div class="item mnp"><button class="del" onclick="this.parentElement.remove()">削除</button>
+    <div class="f2"><div class="f"><label>契約日</label><input type="date" class="m-date"></div>
+    <div class="f"><label>キャリア</label><select class="m-car"><option value="">選択してください</option>${CARRIERS.map(c => `<option>${c}</option>`).join("")}</select></div></div>
+    <div class="f2"><div class="f"><label>回線数</label><input type="number" class="m-qty" inputmode="numeric" min="1" value="1"></div>
+    <div class="f"><label>金額（分かれば・円）</label><input type="number" class="m-amt" inputmode="numeric"></div></div></div>`);
+}
+function addPrd() {
+  $("prdList").insertAdjacentHTML("beforeend", `<div class="item prd"><button class="del" onclick="this.parentElement.remove()">削除</button>
+    <div class="f"><label>商品の型番（商品名）</label><input type="text" class="p-name" placeholder="例：Nintendo Switch 2"></div>
+    <div class="f2"><div class="f"><label>個数</label><input type="number" class="p-qty" inputmode="numeric" min="1" value="1"></div>
+    <div class="f"><label>到着日（または持込日）</label><input type="date" class="p-date"></div></div>
+    <div class="f"><label>金額（分かれば・合計の円）</label><input type="number" class="p-amt" inputmode="numeric"></div></div>`);
+}
+
+function collect() {
+  const ans = document.querySelector("input[name=ans]:checked")?.value;
+  const num = v => v === "" ? null : Number(v);
+  const items = [];
+  if (ans === "has") {
+    document.querySelectorAll(".item.mnp").forEach(el => items.push({ kind: "mnp", date: el.querySelector(".m-date").value, carrier: el.querySelector(".m-car").value, qty: num(el.querySelector(".m-qty").value), amount: num(el.querySelector(".m-amt").value) }));
+    document.querySelectorAll(".item.prd").forEach(el => items.push({ kind: "product", name: el.querySelector(".p-name").value.trim(), qty: num(el.querySelector(".p-qty").value), date: el.querySelector(".p-date").value, amount: num(el.querySelector(".p-amt").value) }));
+  }
+  return { ans, items, memo: ans === "none" ? "" : $("memo").value.trim() };
+}
+function summaryText(d) {
+  const L = ["【未入金の確認】" + (label ? label + "です" : "")];
+  if (d.ans === "none") return L[0] + "\n該当なし";
+  if (d.ans === "checking") L.push("確認中（詳細が分かり次第送ります）");
+  if (d.ans === "has") {
+    const m = d.items.filter(x => x.kind === "mnp"), p = d.items.filter(x => x.kind === "product");
+    if (m.length) { L.push("", "■MNPキャッシュバックの未入金"); m.forEach((x, i) => L.push(`${i + 1}. 契約日：${x.date || "不明"}／キャリア：${x.carrier || "不明"}／回線数：${x.qty ?? "不明"}${x.amount != null ? "／金額：" + x.amount.toLocaleString() + "円" : ""}`)); }
+    if (p.length) { L.push("", "■商品の未入金"); p.forEach((x, i) => L.push(`${i + 1}. ${x.name}／個数：${x.qty ?? "不明"}／到着日：${x.date || "不明"}${x.amount != null ? "／金額：" + x.amount.toLocaleString() + "円" : ""}`)); }
+  }
+  if (d.memo) L.push("", "補足：" + d.memo);
+  return L.join("\n");
+}
+async function send() {
+  const d = collect(); $("err").textContent = "";
+  if (!d.ans) { $("err").textContent = "「該当なし・該当あり・確認中」のどれかを選んでください"; return; }
+  if (d.ans === "has") {
+    if (!d.items.length) { $("err").textContent = "未入金の内容を1つ以上追加してください"; return; }
+    if (d.items.some(x => x.kind === "product" && !x.name)) { $("err").textContent = "商品の型番（商品名）を入力してください"; return; }
+    if (d.items.some(x => x.kind === "mnp" && !x.carrier)) { $("err").textContent = "MNPのキャリアを選んでください"; return; }
+  }
+  $("sendBtn").disabled = true; $("sendBtn").textContent = "送信中…";
+  try {
+    const r = await fetch(`${DB}/gild/formSubs/${token}.json`, { method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ answer: d.ans, items: d.items, memo: d.memo, summary: summaryText(d), at: Date.now() }) });
+    if (!r.ok) throw new Error(r.status);
+    $("summary").textContent = summaryText(d);
+    $("doneLead").innerHTML = d.ans === "none"
+      ? "ありがとうございます。最後に、記録として残すため<b>下の「LINEで送る」から、運営に「該当なし」とひと言送ってください。</b>"
+      : "ありがとうございます。記録として残すため、<b>下の「LINEで送る」から、入力した内容を運営に送ってください。</b>文章は自動で入ります。";
+    prevSubs.unshift({ summary: summaryText(d), at: Date.now() });
+    $("formView").classList.add("hidden"); $("doneView").classList.remove("hidden"); window.scrollTo(0, 0);
+  } catch (e) {
+    $("err").textContent = "送信できませんでした。通信状況を確認して、もう一度お試しください。"; $("sendBtn").disabled = false; $("sendBtn").textContent = "送信する";
+  }
+}
+async function copySummary(text, btn) {
+  const t = text || $("summary").textContent; btn = btn || $("copyBtn");
+  try { await navigator.clipboard.writeText(t); } catch (e) { const a = document.createElement("textarea"); a.value = t; document.body.appendChild(a); a.select(); document.execCommand("copy"); a.remove(); }
+  const o = btn.textContent; btn.textContent = "コピーしました"; setTimeout(() => btn.textContent = o, 2000);
+}
+function sendLine(text) {
+  const t = text || $("summary").textContent;
+  location.href = "https://line.me/R/share?text=" + encodeURIComponent(t);
+}
+init();
+</script>
+</body>
+</html>
