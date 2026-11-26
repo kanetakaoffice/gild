@@ -82,6 +82,8 @@ h3{font-size:15px;margin:0 0 8px}
 .toolbar input[type=search]{flex:1;min-width:180px;padding:7px 10px;border:1px solid var(--line);border-radius:7px;background:#fff}
 .chips{display:flex;gap:4px;flex-wrap:wrap}
 .chip{border:1px solid var(--line);background:#fff;border-radius:14px;padding:3px 11px;font-size:12px}
+.iss-note{font-size:13px;border-left:3px solid var(--line);padding:2px 0 2px 10px;margin:6px 0;white-space:pre-wrap}
+.iss-plan{font-size:13px;white-space:pre-wrap;margin-top:3px;color:#444}
 .chip.on{background:var(--dark);color:#fff;border-color:var(--dark)}
 
 /* table */
@@ -258,6 +260,7 @@ h3{font-size:15px;margin:0 0 8px}
       <nav>
         <button data-tab="home" class="on" onclick="go('home')">ホーム</button>
         <button data-tab="members" onclick="go('members')">会員</button>
+        <button data-tab="issues" onclick="go('issues')">運営課題</button>
         <button data-tab="pay" onclick="go('pay')">支払い</button>
         <button data-tab="arrears" onclick="go('arrears')">GAIN未入金</button>
       </nav>
@@ -279,6 +282,7 @@ h3{font-size:15px;margin:0 0 8px}
     <section id="v-detail" class="hidden"></section>
     <section id="v-pay" class="hidden"></section>
     <section id="v-arrears" class="hidden"></section>
+    <section id="v-issues" class="hidden"></section>
   </main>
 </div>
 
@@ -316,7 +320,7 @@ const LEAVE_CHECKS = { date: "退会日を確定した", pay: "月額などの�
 const leaveDone = m => Object.keys(LEAVE_CHECKS).filter(k => m.leaveChecks?.[k]).length;
 const stTag = st => st && st !== "active" ? ` <span class="tag ${st === "leaving" ? "t-orange" : "t-gray"}">${STATUS[st]}</span>` : "";
 
-let state = { members: {}, meetings: {}, payments: {}, arrears: {}, logs: {}, formTokens: {}, formSubs: {}, formLookup: {}, formConfig: {} };
+let state = { members: {}, meetings: {}, payments: {}, arrears: {}, logs: {}, formTokens: {}, formSubs: {}, formLookup: {}, formConfig: {}, issues: {} };
 const CHECK = { unchecked: "未確認", has: "未入金あり", none: "未入金なし" };
 const ARR_ST = { unpaid: "未入金", settled: "精算済み" };
 const EVID = { line: "LINE", mail: "メール", apply: "買取依頼書・買取申請", form: "回答フォーム", slip: "納品書・発送伝票", bank: "振込・取引明細", photo: "写真・スクショ", other: "その他" };
@@ -463,7 +467,7 @@ async function save(method, path, body) {
 async function loadAll() {
   if (DEMO) return;
   const d = await db("GET", "") || {};
-  state.members = d.members || {}; state.meetings = d.meetings || {}; state.payments = d.payments || {}; state.arrears = d.arrears || {}; state.logs = d.logs || {}; state.formTokens = d.formTokens || {}; state.formSubs = d.formSubs || {}; state.formConfig = d.formConfig || {};
+  state.members = d.members || {}; state.meetings = d.meetings || {}; state.payments = d.payments || {}; state.arrears = d.arrears || {}; state.logs = d.logs || {}; state.formTokens = d.formTokens || {}; state.formSubs = d.formSubs || {}; state.formConfig = d.formConfig || {}; state.issues = d.issues || {};
 }
 
 /* ---------- 計算 ---------- */
@@ -520,7 +524,7 @@ function openRow(id, anchor) { go("detail", id); if (anchor) setTimeout(() => do
 function go(tab, id) {
   ui.tab = tab; if (id) ui.detailId = id;
   document.querySelectorAll("nav button").forEach(b => b.classList.toggle("on", b.dataset.tab === (tab === "detail" ? "members" : tab)));
-  ["home", "members", "detail", "pay", "arrears"].forEach(t => $("v-" + t).classList.toggle("hidden", t !== tab));
+  ["home", "members", "detail", "pay", "arrears", "issues"].forEach(t => $("v-" + t).classList.toggle("hidden", t !== tab));
   render(); window.scrollTo(0, 0);
 }
 function render() {
@@ -529,6 +533,7 @@ function render() {
   if (ui.tab === "detail") renderDetail();
   if (ui.tab === "pay") renderPay();
   if (ui.tab === "arrears") renderArrears();
+  if (ui.tab === "issues") renderIssues();
 }
 
 /* ---------- ページ見出しバー ---------- */
@@ -541,9 +546,9 @@ function pbar(title, actions = "", lead = "") {
 function renderHome() {
   const act = membersArr().filter(m => m.status !== "left");
   const active = act.filter(m => (m.status || "active") === "active");
-  const cares = [];
-  act.forEach(m => openCare(m.id).forEach(x => cares.push({ m, x })));
-  cares.sort((a, b) => (b.x.date || "").localeCompare(a.x.date || "") || byNo(a.m, b.m));
+  const cares = careItems();
+  const iss = issuesArr().filter(x => x.status !== "done").sort(issSort), issOver = iss.filter(x => x.due && daysFrom(x.due) < 0).length;
+  const todo = [...iss.map(x => ({ iss: x })), ...cares];
   const k = curYM();
   const unpaid = act.filter(m => ["active", "leaving", undefined].includes(m.status) && monthApplies(m, k) && !isPaid(m.id, k)).sort(byNo);
   const entryPart = act.filter(m => { const e = entryInfo(m); return e.rest > 0 && (e.st === "part" || m.entryPlan); }).sort(byNo);
@@ -576,7 +581,7 @@ function renderHome() {
   <div class="hstats">
     ${stat("在籍会員", active.length, "人", [leaving.length ? `<span style="color:#a8661c">退会予定 ${leaving.length}人</span>` : "", act.length - active.length - leaving.length ? `休会 ${act.length - active.length - leaving.length}人` : ""].filter(Boolean).join("・") || "　", "go('members')")}
     ${stat("今週のミーティング", week.length, "件", overdue.length ? `<span class="red">予定日を過ぎた ${overdue.length}件</span>` : later ? `それ以降の予定 ${later}件` : "　", "document.getElementById('hSched').scrollIntoView({behavior:'smooth'})")}
-    ${stat("運営側でやること（未対応）", cares.length, "件", "　", "document.getElementById('hCare').scrollIntoView({behavior:'smooth'})", cares.length ? "red" : "")}
+    ${stat("運営の課題・やること", todo.length, "件", issOver ? `<span class="red">期限切れ ${issOver}件</span>` : "運営課題の画面へ →", "go('issues')", issOver ? "red" : "")}
     ${stat(`${Number(k.slice(5))}月の月額 未払い`, unpaid.length, "人", "支払い画面へ →", "go('pay')", unpaid.length ? "red" : "")}
     ${stat("GAIN未入金", arrTotal.toLocaleString(), "円", `${arrOpen.length}件${arrOpen.filter(amtUnknown).length ? `・金額未確定 ${arrOpen.filter(amtUnknown).length}件` : ""}`, "go('arrears')", arrTotal ? "red" : "")}
   </div>
@@ -594,8 +599,8 @@ function renderHome() {
       </div>` : ""}
     </div>
     <div>
-      <div class="card" id="hCare"><h3>運営側でやること（未対応）<span class="cnt">${cares.length}</span></h3>
-        ${cares.length ? cut(cares, "care").map(({ m, x }) => `<div class="row rowlink" onclick="openRow('${m.id}','d-mtg')"><div class="grow">${nm(m)}<div class="meta">${x.date ? fmtD(x.date) : "日付不明"} のミーティング</div><div style="white-space:pre-wrap;font-size:13px;margin-top:2px">${esc(x.care)}</div></div><button class="btn sm" onclick="event.stopPropagation();toggleCare('${x.id}')">対応済み</button></div>`).join("") + more("care", cares.length) : `<div class="empty">未対応のものはありません</div>`}
+      <div class="card" id="hCare"><h3 style="display:flex;align-items:center">運営の課題・やること<span class="cnt">${todo.length}</span><button class="btn sm" style="margin-left:auto" onclick="openIssue()">＋ 課題を追加</button></h3>
+        ${todo.length ? cut(todo, "care").map(t => t.iss ? issRow(t.iss, true) : careRow(t)).join("") + more("care", todo.length) : `<div class="empty">未完了のものはありません</div>`}
       </div>
       <div class="card"><h3>フォローが必要<span class="cnt">${idle.length}</span><span class="meta" style="font-weight:400;margin-left:8px">${CONFIG.idleDays}日以上ミーティングなし・次回未定</span></h3>
         ${idle.length ? cut(idle, "idle").map(m => `<div class="row rowlink" onclick="openRow('${m.id}')"><div class="grow">${nm(m)} ${courseTag(m.course)}<div class="meta">前回：${lastLabel(m.id, true)}</div></div><button class="btn sm" onclick="event.stopPropagation();openMember('${m.id}')">次回MTGを入れる</button></div>`).join("") + more("idle", idle.length) : `<div class="empty">該当する会員はいません</div>`}
@@ -1211,6 +1216,120 @@ function delMeeting(mid) {
   });
 }
 
+/* ---------- 運営課題 ---------- */
+const OWNERS = { hina: "Hina", hak: "HAK代表", kanetaka: "KANETAKA代表" };
+const OWNER_EMAIL = { "kanetaka.hinako_02@icloud.com": "hina", "dorainpact@gmail.com": "hak", "kanetaka.koki_01@icloud.com": "kanetaka" };
+const ISS_ST = { todo: "未着手", doing: "対応中", done: "完了" };
+const myOwner = () => DEMO ? "hina" : OWNER_EMAIL[auth?.email] || "";
+const issuesArr = () => Object.entries(state.issues || {}).map(([id, x]) => ({ id, ...x }));
+const notesOf = x => Object.entries(x.notes || {}).map(([nid, n]) => ({ nid, ...n })).sort((a, b) => (a.date || "").localeCompare(b.date || "") || (a.at || 0) - (b.at || 0));
+const ownerNames = x => (x.owners || []).map(k => OWNERS[k] || k).join("・");
+function issRank(x) { // 期限切れ → 期限が近い（7日以内）→ 自分が担当 → そのほか
+  if (x.due && daysFrom(x.due) < 0) return 0;
+  if (x.due && daysFrom(x.due) <= 7) return 1;
+  if ((x.owners || []).includes(myOwner())) return 2;
+  return 3;
+}
+const issSort = (a, b) => issRank(a) - issRank(b) || (a.due || "9999").localeCompare(b.due || "9999") || (a.createdAt || 0) - (b.createdAt || 0);
+function dueTag(x) {
+  if (!x.due || x.status === "done") return "";
+  const n = daysFrom(x.due);
+  return n < 0 ? `<span class="tag t-red">期限切れ ${fmtD(x.due)}</span>` : n === 0 ? `<span class="tag t-red">今日まで</span>` : n <= 7 ? `<span class="tag t-orange">${fmtD(x.due)}まで（あと${n}日）</span>` : `<span class="tag t-gray">${fmtD(x.due)}まで</span>`;
+}
+const stTagI = x => `<span class="tag ${x.status === "done" ? "t-green" : x.status === "doing" ? "t-orange" : "t-gray"}">${ISS_ST[x.status || "todo"]}</span>`;
+const careItems = () => { const out = []; membersArr().filter(m => m.status !== "left").forEach(m => openCare(m.id).forEach(x => out.push({ m, x }))); return out.sort((a, b) => (b.x.date || "").localeCompare(a.x.date || "") || byNo(a.m, b.m)); };
+function issRow(x, compact) {
+  const ns = notesOf(x), last = ns[ns.length - 1], m = x.memberId && state.members[x.memberId];
+  return `<div class="row rowlink" style="align-items:flex-start" onclick="openIssue('${x.id}')"><div class="grow">
+    <b>${esc(x.title)}</b> ${stTagI(x)} ${dueTag(x)}
+    <div class="meta">担当：${x.owners?.length ? esc(ownerNames(x)) : "未定"}${m ? "　関連する会員：" + esc(m.name) + (m.nick ? "（" + esc(m.nick) + "）" : "") : ""}</div>
+    ${!compact && x.plan ? `<div class="iss-plan"><span class="meta">方針：</span>${esc(x.plan)}</div>` : ""}
+    ${last ? `<div class="meta" style="margin-top:2px">最新の経過（${last.date ? fmtD(last.date) : "日付不明"}）：${esc(last.text.length > 60 ? last.text.slice(0, 60) + "…" : last.text)}</div>` : ""}
+  </div>${x.status !== "done" ? `<button class="btn sm" onclick="event.stopPropagation();setIssueSt('${x.id}','done')">完了にする</button>` : `<button class="btn sm" onclick="event.stopPropagation();setIssueSt('${x.id}','doing')">未完了に戻す</button>`}</div>`;
+}
+function careRow({ m, x }) {
+  return `<div class="row rowlink" style="align-items:flex-start" onclick="openRow('${m.id}','d-mtg')"><div class="grow"><b>${esc(m.name)}</b>${m.nick ? ` <span class="meta">（${esc(m.nick)}）</span>` : ""} <span class="tag t-store">ミーティングから</span>
+    <div class="meta">${x.date ? fmtD(x.date) : "日付不明"} のミーティング</div><div style="white-space:pre-wrap;font-size:13px;margin-top:2px">${esc(x.care)}</div></div>
+    <button class="btn sm" onclick="event.stopPropagation();toggleCare('${x.id}')">対応済み</button></div>`;
+}
+function renderIssues() {
+  const all = issuesArr(), open = all.filter(x => x.status !== "done"), cares = careItems(), me = myOwner();
+  const f = ui.issFilter || "open";
+  let list = f === "done" ? all.filter(x => x.status === "done").sort((a, b) => (b.doneAt || 0) - (a.doneAt || 0))
+    : f === "mine" ? open.filter(x => (x.owners || []).includes(me)).sort(issSort)
+    : f === "over" ? open.filter(x => x.due && daysFrom(x.due) < 0).sort(issSort)
+    : f === "all" ? [...open.sort(issSort), ...all.filter(x => x.status === "done")]
+    : open.sort(issSort);
+  const showCare = f === "open" || f === "all";
+  const chip = (v, label) => `<button class="chip ${f === v ? "on" : ""}" onclick="ui.issFilter='${v}';renderIssues()">${label}</button>`;
+  const over = open.filter(x => x.due && daysFrom(x.due) < 0).length;
+  $("v-issues").innerHTML = pbar("運営課題", `<button class="btn pri" onclick="openIssue()">＋ 課題を追加</button>`) + `
+  <p class="hint" style="margin:0 0 12px">運営の3人で共有する課題です。会員とのミーティングで出た「運営側でやること」も、ここにまとめて表示されます。</p>
+  <div class="chips" style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:14px">${chip("open", `未完了（${open.length + cares.length}）`)}${chip("mine", `自分が担当（${open.filter(x => (x.owners || []).includes(me)).length}）`)}${chip("over", `期限切れ（${over}）`)}${chip("done", "完了したもの")}${chip("all", "すべて")}</div>
+  <div class="card">
+    ${list.length ? list.map(x => issRow(x)).join("") : `<div class="empty">${f === "done" ? "完了した課題はまだありません" : "該当する課題はありません"}</div>`}
+  </div>
+  ${showCare ? `<div class="card"><h3>ミーティングから（運営側でやること）<span class="cnt">${cares.length}</span></h3>${cares.length ? cares.map(careRow).join("") : `<div class="empty">未対応のものはありません</div>`}</div>` : ""}`;
+}
+function openIssue(id) {
+  const x = id ? state.issues[id] : { status: "todo", owners: [] };
+  const mem = membersArr().filter(m => m.status !== "left" || m.id === x.memberId).sort(byNo);
+  const ns = id ? notesOf(x) : [];
+  modal(`<h3>${id ? "運営課題" : "運営課題を追加"}</h3>
+    <div class="f"><label>課題（必須）</label><input id="isTitle" value="${esc(x.title)}" placeholder="例：HAYATO未入金の精算をどう進めるか"></div>
+    <div class="f"><label>方針（どう進めるか）</label><textarea id="isPlan" style="min-height:70px" placeholder="決まっていなければ空欄で大丈夫です">${esc(x.plan)}</textarea></div>
+    <div class="f"><label>担当（複数選べます）</label><div style="display:flex;flex-wrap:wrap;gap:4px 16px">${Object.entries(OWNERS).map(([k, v]) => `<label class="chk" style="color:inherit;font-size:14px;margin:0"><input type="checkbox" class="isOwner" value="${k}" ${(x.owners || []).includes(k) ? "checked" : ""}>${v}</label>`).join("")}</div></div>
+    <div class="f2"><div class="f"><label>期限</label><input id="isDue" type="date" value="${esc(x.due)}"></div>
+    <div class="f"><label>状態</label><select id="isSt">${Object.entries(ISS_ST).map(([k, v]) => `<option value="${k}" ${(x.status || "todo") === k ? "selected" : ""}>${v}</option>`).join("")}</select></div></div>
+    <div class="f"><label>関連する会員（あれば）</label><select id="isMem"><option value="">—</option>${mem.map(m => `<option value="${m.id}" ${x.memberId === m.id ? "selected" : ""}>${esc((m.salonNo ? m.salonNo + " " : "") + m.name + (m.nick ? "（" + m.nick + "）" : ""))}</option>`).join("")}</select></div>
+    ${id ? `<div class="f"><label>経過メモ（日付付きで書き足していきます）</label>
+      ${ns.length ? ns.map(n => `<div class="iss-note"><span class="meta">${n.date ? fmtDY(n.date) : "日付不明"}${n.by ? "　" + esc(OWNERS[OWNER_EMAIL[n.by]] || "") : ""}</span>　<button class="btn sm" style="padding:0 6px;font-size:11px" onclick="delIssueNote('${id}','${n.nid}')">削除</button><br>${esc(n.text)}</div>`).join("") : `<div class="hint">まだありません</div>`}
+      <div class="f2" style="margin-top:8px;grid-template-columns:140px 1fr"><input id="inDate" type="date" value="${todayStr()}"><textarea id="inText" style="min-height:44px" placeholder="例：弁護士に相談、○○の方向で進めることに。検品は○○さんに依頼"></textarea></div>
+      <button class="btn sm" style="margin-top:6px" onclick="addIssueNote('${id}')">経過メモを追加</button></div>` : `<div class="hint">経過メモは、保存したあとに書き足せます。</div>`}
+    <div class="mact">${id ? `<button class="btn danger" style="margin-right:auto" onclick="delIssue('${id}')">削除</button>` : ""}<button class="btn" onclick="closeModal()">キャンセル</button><button class="btn pri" onclick="saveIssue(${id ? `'${id}'` : ""})">保存</button></div>`);
+}
+function issueForm() {
+  return { title: $("isTitle").value.trim(), plan: $("isPlan").value.trim(), owners: [...document.querySelectorAll(".isOwner:checked")].map(e => e.value), due: $("isDue").value, status: $("isSt").value, memberId: $("isMem").value };
+}
+async function saveIssue(id) {
+  const d = issueForm();
+  if (!d.title) { alert("課題を入力してください"); return; }
+  const old = id ? state.issues[id] : null;
+  d.doneAt = d.status === "done" ? (old?.status === "done" ? old.doneAt || Date.now() : Date.now()) : null;
+  d.updatedAt = Date.now();
+  const nid = id || uid();
+  state.issues[nid] = { ...(old || { createdAt: Date.now(), by: auth?.email || "demo" }), ...d };
+  closeModal(); render(); toast("保存しました");
+  await save(id ? "PATCH" : "PUT", `issues/${nid}`, id ? d : state.issues[nid]);
+}
+async function setIssueSt(id, st) {
+  const x = state.issues[id]; x.status = st; x.doneAt = st === "done" ? Date.now() : null;
+  render(); toast(st === "done" ? "完了にしました" : "未完了に戻しました");
+  await save("PATCH", `issues/${id}`, { status: st, doneAt: x.doneAt });
+}
+async function addIssueNote(id) {
+  const text = $("inText").value.trim();
+  if (!text) { alert("経過メモを入力してください"); return; }
+  const keep = issueForm(), nid = uid(), n = { date: $("inDate").value, text, at: Date.now(), by: auth?.email || "demo" };
+  const x = state.issues[id]; x.notes = { ...(x.notes || {}), [nid]: n };
+  openIssue(id); restoreIssueForm(keep); toast("経過メモを追加しました");
+  await save("PUT", `issues/${id}/notes/${nid}`, n);
+}
+function delIssueNote(id, nid) {
+  const keep = issueForm();
+  confirmBox("この経過メモを削除しますか？", async () => {
+    delete state.issues[id].notes[nid]; openIssue(id); restoreIssueForm(keep); toast("削除しました");
+    await save("DELETE", `issues/${id}/notes/${nid}`);
+  });
+}
+function restoreIssueForm(d) { // 経過メモを追加しても、上の欄の書きかけを消さない
+  $("isTitle").value = d.title; $("isPlan").value = d.plan; $("isDue").value = d.due; $("isSt").value = d.status; $("isMem").value = d.memberId;
+  document.querySelectorAll(".isOwner").forEach(e => e.checked = d.owners.includes(e.value));
+}
+function delIssue(id) {
+  confirmBox("この課題を削除しますか？経過メモも消えます。", async () => { delete state.issues[id]; closeModal(); render(); toast("削除しました"); await save("DELETE", `issues/${id}`); });
+}
+
 /* ---------- モーダル ---------- */
 function modal(html) { $("modalRoot").innerHTML = `<div class="ov" onclick="if(event.target===this)closeModal()"><div class="modal">${html}</div></div>`; }
 function closeModal() { $("modalRoot").innerHTML = ""; }
@@ -1448,6 +1567,14 @@ function exportCSV() {
 }
 
 /* ---------- デモデータ ---------- */
+function demoIssues() {
+  const t = new Date(), d = n => { const x = new Date(t); x.setDate(x.getDate() + n); return x.toLocaleDateString("sv-SE"); };
+  state.issues = {
+    i1: { title: "HAYATO未入金の精算をどう進めるか", plan: "会員ごとの未入金を回答フォームで集めて、弁護士に相談する", owners: ["hina", "kanetaka"], due: d(3), status: "doing", createdAt: 1, notes: { n1: { date: d(-2), text: "回答フォームを会員に送付", at: 1 } } },
+    i2: { title: "1月からの契約書の準備", plan: "", owners: ["hak"], due: d(-1), status: "todo", createdAt: 2 },
+    i3: { title: "退会予定者の手続きの進め方を決める", owners: [], status: "todo", createdAt: 3 }
+  };
+}
 function demoData() {
   const t = new Date(), d = n => { const x = new Date(t); x.setDate(x.getDate() + n); return x.toLocaleDateString("sv-SE"); };
   const mk = (name, kana, nick, course, join, fee, next, entryPaid = true) => ({ name, kana, nick, course, joinDate: join, fee, entryFee: 50000, entryPaid, status: "active", nextMtg: next });
@@ -1479,7 +1606,7 @@ function demoData() {
 async function startApp() {
   $("loginView").classList.add("hidden"); $("appView").classList.remove("hidden");
   $("userEmail").textContent = DEMO ? "デモ" : auth.email;
-  if (DEMO) { $("demoBar").classList.remove("hidden"); demoData(); }
+  if (DEMO) { $("demoBar").classList.remove("hidden"); demoData(); demoIssues(); }
   else { try { await loadAll(); } catch (e) { alert("データの読み込みに失敗しました: " + e.message); } }
   let back = null;
   try { back = JSON.parse(sessionStorage.getItem("gildUi") || "null"); sessionStorage.removeItem("gildUi"); } catch (e) {}
