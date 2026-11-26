@@ -1219,7 +1219,8 @@ const OWNERS = { hina: "Hina", hak: "HAK代表", kanetaka: "KANETAKA代表" };
 const OWNER_EMAIL = { "kanetaka.hinako_02@icloud.com": "hina", "dorainpact@gmail.com": "hak", "kanetaka.koki_01@icloud.com": "kanetaka" };
 const ISS_ST = { todo: "未着手", doing: "対応中", done: "完了" };
 const NOTE_KIND = { lawyer: "弁護士相談", mtg: "運営MTG", other: "その他" };
-const kindTag = n => n.kind && NOTE_KIND[n.kind] ? `<span class="tag ${n.kind === "lawyer" ? "t-red" : n.kind === "mtg" ? "t-store" : "t-gray"}">${NOTE_KIND[n.kind]}</span> ` : "";
+const KIND_LABEL = { ...NOTE_KIND, plan: "方針の変更" };
+const kindTag = n => n.kind === "plan" ? `<span class="tag t-orange">方針の変更</span> ` : n.kind && NOTE_KIND[n.kind] ? `<span class="tag ${n.kind === "lawyer" ? "t-red" : n.kind === "mtg" ? "t-store" : "t-gray"}">${NOTE_KIND[n.kind]}</span> ` : "";
 const hasLawyer = x => notesOf(x).some(n => n.kind === "lawyer");
 const myOwner = () => DEMO ? "hina" : OWNER_EMAIL[auth?.email] || "";
 const issuesArr = () => Object.entries(state.issues || {}).map(([id, x]) => ({ id, ...x }));
@@ -1283,7 +1284,7 @@ function openIssue(id) {
   const ns = id ? notesOf(x) : [];
   modal(`<h3>${id ? "運営課題" : "運営課題を追加"}</h3>
     <div class="f"><label>課題（必須）</label><input id="isTitle" value="${esc(x.title)}" placeholder="例：HAYATO未入金の精算をどう進めるか"></div>
-    <div class="f"><label>方針（どう進めるか）</label><textarea id="isPlan" style="min-height:70px" placeholder="決まっていなければ空欄で大丈夫です">${esc(x.plan)}</textarea></div>
+    <div class="f"><label>方針（今の時点での進め方。書き換えると、変更前の方針は経過メモに自動で残ります）</label><textarea id="isPlan" style="min-height:70px" placeholder="決まっていなければ空欄で大丈夫です">${esc(x.plan)}</textarea></div>
     <div class="f"><label>担当（複数選べます）</label><div style="display:flex;flex-wrap:wrap;gap:4px 16px">${Object.entries(OWNERS).map(([k, v]) => `<label class="chk" style="color:inherit;font-size:14px;margin:0"><input type="checkbox" class="isOwner" value="${k}" ${(x.owners || []).includes(k) ? "checked" : ""}>${v}</label>`).join("")}</div></div>
     <div class="f2"><div class="f"><label>期限</label><input id="isDue" type="date" value="${esc(x.due)}"></div>
     <div class="f"><label>状態</label><select id="isSt">${Object.entries(ISS_ST).map(([k, v]) => `<option value="${k}" ${(x.status || "todo") === k ? "selected" : ""}>${v}</option>`).join("")}</select></div></div>
@@ -1308,9 +1309,15 @@ async function saveIssue(id) {
     const k = document.querySelector("input[name=inKind]:checked")?.value || "other", n = { date: $("inDate").value, kind: k, text: $("inText").value.trim(), at: Date.now(), by: auth?.email || "demo" };
     d.notes = { [uid()]: n }; ui.lastKind = k; ui.lastNoteDate = n.date; ui.lastNoteAt = Date.now();
   }
+  let planNote = null;
+  if (old && (old.plan || "") !== d.plan && old.plan) { // 方針を書き換えたら、変更前の方針を経過メモに残す
+    planNote = [uid(), { date: todayStr(), kind: "plan", text: `変更前：${old.plan}\n変更後：${d.plan || "（空欄）"}`, at: Date.now(), by: auth?.email || "demo" }];
+  }
   state.issues[nid] = { ...(old || { createdAt: Date.now(), by: auth?.email || "demo" }), ...d };
+  if (planNote) state.issues[nid].notes = { ...(state.issues[nid].notes || {}), [planNote[0]]: planNote[1] };
   closeModal(); render(); toast("保存しました");
   await save(id ? "PATCH" : "PUT", `issues/${nid}`, id ? d : state.issues[nid]);
+  if (planNote) await save("PUT", `issues/${nid}/notes/${planNote[0]}`, planNote[1]);
 }
 async function setIssueSt(id, st) {
   const x = state.issues[id]; x.status = st; x.doneAt = st === "done" ? Date.now() : null;
