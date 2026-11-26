@@ -28,6 +28,14 @@ h2{font-size:16px;margin:0 0 10px}
 .f label{display:block;font-size:13px;color:var(--sub);margin-bottom:3px}
 input[type=text],input[type=tel],input[type=number],input[type=date],select,textarea{width:100%;padding:10px 12px;border:1px solid var(--line);border-radius:8px;font:inherit;background:#fff;color:inherit}
 textarea{min-height:80px}
+input[type=date]{-webkit-appearance:none;appearance:none;display:block;min-width:0;max-width:100%;min-height:46px;text-align:left}
+input[type=date]::-webkit-date-and-time-value{text-align:left}
+.f2>*{min-width:0}
+.opt{color:var(--sub);font-weight:400;font-size:12px}
+.seg{display:flex;gap:6px;flex-wrap:wrap}
+.seg label{flex:1;min-width:90px;display:flex;align-items:center;justify-content:center;gap:6px;border:1px solid var(--line);border-radius:8px;padding:9px 6px;font-size:14px;color:var(--ink);background:#fff;cursor:pointer;margin:0}
+.seg label.on{border-color:var(--gold);background:var(--gold-soft);font-weight:700}
+.seg input{display:none}
 .f2{display:grid;grid-template-columns:1fr 1fr;gap:10px}
 button{font:inherit;cursor:pointer}
 .add{border:1px dashed var(--gold);background:#fff;color:var(--gold);border-radius:8px;padding:10px;width:100%}
@@ -121,7 +129,7 @@ pre{white-space:pre-wrap;font-family:inherit;background:#faf9f5;border:1px solid
 <script>
 const DB = "https://gild-members-default-rtdb.asia-southeast1.firebasedatabase.app";
 const DEADLINE = "11/30（月）午前中";
-const CARRIERS = ["docomo", "au", "SoftBank", "楽天モバイル", "ahamo", "povo", "LINEMO", "UQモバイル", "Y!mobile", "その他"];
+const CARRIERS = ["docomo", "au", "SoftBank", "楽天モバイル", "ahamo", "povo", "LINEMO", "UQモバイル", "Y!mobile", "その他", "分からない"];
 const $ = id => document.getElementById(id);
 const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 let token = new URLSearchParams(location.search).get("t") || "";
@@ -200,18 +208,35 @@ document.addEventListener("change", e => {
 
 function addMnp() {
   $("mnpList").insertAdjacentHTML("beforeend", `<div class="item mnp"><button class="del" onclick="this.parentElement.remove()">削除</button>
-    <div class="f2"><div class="f"><label>契約日</label><input type="date" class="m-date"></div>
+    <div class="f2"><div class="f"><label>契約日 <span class="opt">任意</span></label><input type="date" class="m-date"></div>
     <div class="f"><label>キャリア</label><select class="m-car"><option value="">選択してください</option>${CARRIERS.map(c => `<option>${c}</option>`).join("")}</select></div></div>
     <div class="f2"><div class="f"><label>回線数</label><input type="number" class="m-qty" inputmode="numeric" min="1" value="1"></div>
-    <div class="f"><label>金額（分かれば・円）</label><input type="number" class="m-amt" inputmode="numeric"></div></div></div>`);
+    <div class="f"><label>金額（円） <span class="opt">任意</span></label><input type="number" class="m-amt" inputmode="numeric"></div></div></div>`);
 }
+let prdN = 0;
 function addPrd() {
+  const n = ++prdN;
   $("prdList").insertAdjacentHTML("beforeend", `<div class="item prd"><button class="del" onclick="this.parentElement.remove()">削除</button>
     <div class="f"><label>商品の型番（商品名）</label><input type="text" class="p-name" placeholder="例：Nintendo Switch 2"></div>
     <div class="f2"><div class="f"><label>個数</label><input type="number" class="p-qty" inputmode="numeric" min="1" value="1"></div>
-    <div class="f"><label>到着日（または持込日）</label><input type="date" class="p-date"></div></div>
-    <div class="f"><label>金額（分かれば・合計の円）</label><input type="number" class="p-amt" inputmode="numeric"></div></div>`);
+    <div class="f"><label>申請日 <span class="opt">任意</span></label><input type="date" class="p-apply"></div></div>
+    <div class="f"><label>受け渡し方法</label><div class="seg">
+      <label><input type="radio" name="pw${n}" value="bring" class="p-way">持ち込み</label>
+      <label><input type="radio" name="pw${n}" value="mail" class="p-way">郵送</label>
+      <label><input type="radio" name="pw${n}" value="unknown" class="p-way">分からない</label></div></div>
+    <div class="way-bring hidden"><div class="f"><label>持込日 <span class="opt">任意</span></label><input type="date" class="p-date"></div></div>
+    <div class="way-mail hidden"><div class="f2"><div class="f"><label>発送日 <span class="opt">任意</span></label><input type="date" class="p-ship"></div>
+      <div class="f"><label>伝票番号 <span class="opt">任意</span></label><input type="text" class="p-track" inputmode="numeric" placeholder="追跡番号"></div></div>
+      <p class="sub" style="font-size:12px;margin:-4px 0 8px">到着日は分からなくても大丈夫です。発送日・伝票番号も、分からなければ空欄のままで送信できます。</p></div>
+    <div class="f"><label>金額（合計の円） <span class="opt">任意</span></label><input type="number" class="p-amt" inputmode="numeric"></div></div>`);
 }
+document.addEventListener("change", e => {
+  if (!e.target.classList.contains("p-way")) return;
+  const it = e.target.closest(".item");
+  it.querySelectorAll(".seg label").forEach(l => l.classList.toggle("on", l.querySelector("input").checked));
+  it.querySelector(".way-bring").classList.toggle("hidden", e.target.value !== "bring");
+  it.querySelector(".way-mail").classList.toggle("hidden", e.target.value !== "mail");
+});
 
 function collect() {
   const ans = document.querySelector("input[name=ans]:checked")?.value;
@@ -219,7 +244,10 @@ function collect() {
   const items = [];
   if (ans === "has") {
     document.querySelectorAll(".item.mnp").forEach(el => items.push({ kind: "mnp", date: el.querySelector(".m-date").value, carrier: el.querySelector(".m-car").value, qty: num(el.querySelector(".m-qty").value), amount: num(el.querySelector(".m-amt").value) }));
-    document.querySelectorAll(".item.prd").forEach(el => items.push({ kind: "product", name: el.querySelector(".p-name").value.trim(), qty: num(el.querySelector(".p-qty").value), date: el.querySelector(".p-date").value, amount: num(el.querySelector(".p-amt").value) }));
+    document.querySelectorAll(".item.prd").forEach(el => { const way = el.querySelector(".p-way:checked")?.value || "";
+      items.push({ kind: "product", name: el.querySelector(".p-name").value.trim(), qty: num(el.querySelector(".p-qty").value), applyDate: el.querySelector(".p-apply").value,
+        way, date: way === "bring" ? el.querySelector(".p-date").value : "", shipDate: way === "mail" ? el.querySelector(".p-ship").value : "",
+        track: way === "mail" ? el.querySelector(".p-track").value.trim() : "", amount: num(el.querySelector(".p-amt").value) }); });
   }
   return { ans, items, memo: ans === "none" ? "" : $("memo").value.trim() };
 }
@@ -230,7 +258,8 @@ function summaryText(d) {
   if (d.ans === "has") {
     const m = d.items.filter(x => x.kind === "mnp"), p = d.items.filter(x => x.kind === "product");
     if (m.length) { L.push("", "■MNPキャッシュバックの未入金"); m.forEach((x, i) => L.push(`${i + 1}. 契約日：${x.date || "不明"}／キャリア：${x.carrier || "不明"}／回線数：${x.qty ?? "不明"}${x.amount != null ? "／金額：" + x.amount.toLocaleString() + "円" : ""}`)); }
-    if (p.length) { L.push("", "■商品の未入金"); p.forEach((x, i) => L.push(`${i + 1}. ${x.name}／個数：${x.qty ?? "不明"}／到着日：${x.date || "不明"}${x.amount != null ? "／金額：" + x.amount.toLocaleString() + "円" : ""}`)); }
+    const WAY = { bring: "持ち込み", mail: "郵送", unknown: "分からない" };
+    if (p.length) { L.push("", "■商品の未入金"); p.forEach((x, i) => L.push(`${i + 1}. ${x.name}／個数：${x.qty ?? "不明"}${x.applyDate ? "／申請日：" + x.applyDate : ""}／${x.way ? WAY[x.way] : "受け渡し方法：不明"}${x.way === "bring" ? "（持込日：" + (x.date || "不明") + "）" : ""}${x.way === "mail" ? "（発送日：" + (x.shipDate || "不明") + (x.track ? "・伝票番号：" + x.track : "") + "）" : ""}${x.amount != null ? "／金額：" + x.amount.toLocaleString() + "円" : ""}`)); }
   }
   if (d.memo) L.push("", "補足：" + d.memo);
   return L.join("\n");
@@ -241,7 +270,7 @@ async function send() {
   if (d.ans === "has") {
     if (!d.items.length) { $("err").textContent = "未入金の内容を1つ以上追加してください"; return; }
     if (d.items.some(x => x.kind === "product" && !x.name)) { $("err").textContent = "商品の型番（商品名）を入力してください"; return; }
-    if (d.items.some(x => x.kind === "mnp" && !x.carrier)) { $("err").textContent = "MNPのキャリアを選んでください"; return; }
+    if (d.items.some(x => x.kind === "mnp" && !x.carrier)) { $("err").textContent = "MNPのキャリアを選んでください（分からない場合は「分からない」）"; return; }
   }
   $("sendBtn").disabled = true; $("sendBtn").textContent = "送信中…";
   try {
