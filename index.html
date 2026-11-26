@@ -1080,11 +1080,13 @@ async function importSub(t, sid) {
   const when = new Date(x.at).toLocaleDateString("ja-JP"), add = {};
   (x.items || []).forEach(it => {
     const id = uid();
-    add[id] = { memberId: mid, date: it.date || "", status: "unpaid",
+    const WAY = { bring: "持ち込み", mail: "郵送", unknown: "受け渡し方法不明" };
+    const extra = it.kind === "product" ? [it.applyDate ? "申請日 " + it.applyDate : "", it.way ? WAY[it.way] : "", it.shipDate ? "発送日 " + it.shipDate : "", it.track ? "伝票番号 " + it.track : ""].filter(Boolean).join("・") : "";
+    add[id] = { memberId: mid, date: it.date || it.shipDate || it.applyDate || "", status: "unpaid",
       item: it.kind === "mnp" ? `MNPキャッシュバック（${it.carrier || "キャリア不明"}）` : it.name,
       qty: it.qty ?? null, unitPrice: null, amount: it.amount ?? null,
       evidence: [], evStatus: "pending", evidenceNote: "",
-      note: `${when} 回答フォームで申告${x.memo ? "／補足：" + x.memo : ""}`, createdAt: Date.now(), by: auth?.email || "demo" };
+      note: `${when} 回答フォームで申告${extra ? "（" + extra + "）" : ""}${x.memo ? "／補足：" + x.memo : ""}`, createdAt: Date.now(), by: auth?.email || "demo" };
   });
   const check = x.answer === "has" ? "has" : x.answer === "none" ? "none" : (m.gainCheck || "unchecked");
   confirmBox(`${m.name}さんの回答（${ANS[x.answer]}）を取り込みます。${Object.keys(add).length ? `未入金 ${Object.keys(add).length}件を追加し、` : ""}聞き取りを「${CHECK[check]}」にします。`, async () => {
