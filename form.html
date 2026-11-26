@@ -111,7 +111,7 @@ pre{white-space:pre-wrap;font-family:inherit;background:#faf9f5;border:1px solid
       <textarea id="memo" placeholder="分かっていることや、やり取りの状況など"></textarea>
     </div>
 
-    <div id="lateNote" class="card hidden" style="border-color:var(--gold);background:var(--gold-soft)"><p class="sub" style="margin:0;color:var(--ink)">回答の期限（<span id="dlText"></span>）を過ぎています。送信はできますが、期限後のお申し出については個別に対応を判断させていただきます。</p></div>
+    <div id="lateNote" class="card hidden" style="border-color:var(--gold);background:var(--gold-soft)"><p class="sub" style="margin:0;color:var(--ink)">回答の期限（<span id="dlText"></span>）を過ぎていますが、送信はできます。</p></div>
     <div class="err" id="err"></div>
     <button class="send" id="sendBtn" onclick="send()" disabled>送信する</button>
     <p class="sub" style="text-align:center;margin-top:8px">送信した内容は、GILD運営（HAK・KANETAKAの代表）だけが確認します。</p>
@@ -146,7 +146,7 @@ async function loadCfg() {
 }
 async function init() {
   await loadCfg();
-  $("deadline").textContent = `回答は ${DEADLINE} までにお願いします。期限までにご回答がない場合は、現時点で該当なしとして集計を進めます。`;
+  $("deadline").textContent = `回答は ${DEADLINE} までにお願いします。`;
   if (!token) { $("loading").classList.add("hidden"); $("phoneView").classList.remove("hidden"); return; }
   if (!/^[a-z0-9]{16,40}$/.test(token)) return showBad();
   try {
