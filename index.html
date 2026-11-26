@@ -1275,6 +1275,8 @@ function renderIssues() {
   </div>
   ${showCare ? `<div class="card"><h3>ミーティングから（運営側でやること）<span class="cnt">${cares.length}</span></h3>${cares.length ? cares.map(careRow).join("") : `<div class="empty">未対応のものはありません</div>`}</div>` : ""}`;
 }
+const noteInput = () => `<div style="display:flex;flex-wrap:wrap;gap:4px 14px;margin-top:8px">${Object.entries(NOTE_KIND).map(([k, v]) => `<label class="chk" style="color:inherit;font-size:14px;margin:0"><input type="radio" name="inKind" value="${k}" ${k === (ui.lastKind || "mtg") ? "checked" : ""}>${v}</label>`).join("")}</div>
+      <div class="f2" style="margin-top:6px;grid-template-columns:140px 1fr"><input id="inDate" type="date" value="${ui.lastNoteDate && Date.now() - ui.lastNoteAt < 3 * 3600000 ? ui.lastNoteDate : todayStr()}"><textarea id="inText" style="min-height:44px" placeholder="例：弁護士に相談、○○の方向で進めることに。検品は○○さんに依頼"></textarea></div>`;
 function openIssue(id) {
   const x = id ? state.issues[id] : { status: "todo", owners: [] };
   const mem = membersArr().filter(m => m.status !== "left" || m.id === x.memberId).sort(byNo);
@@ -1288,9 +1290,8 @@ function openIssue(id) {
     <div class="f"><label>関連する会員（あれば）</label><select id="isMem"><option value="">—</option>${mem.map(m => `<option value="${m.id}" ${x.memberId === m.id ? "selected" : ""}>${esc((m.salonNo ? m.salonNo + " " : "") + m.name + (m.nick ? "（" + m.nick + "）" : ""))}</option>`).join("")}</select></div>
     ${id ? `<div class="f"><label>経過メモ（日付付きで書き足していきます）</label>
       ${ns.length ? ns.map(n => `<div class="iss-note" ${n.kind === "lawyer" ? `style="border-color:#e3b4ad"` : ""}>${kindTag(n)}<span class="meta">${n.date ? fmtDY(n.date) : "日付不明"}${n.by ? "　" + esc(OWNERS[OWNER_EMAIL[n.by]] || "") : ""}</span>　<button class="btn sm" style="padding:0 6px;font-size:11px" onclick="delIssueNote('${id}','${n.nid}')">削除</button><br>${esc(n.text)}</div>`).join("") : `<div class="hint">まだありません</div>`}
-      <div style="display:flex;flex-wrap:wrap;gap:4px 14px;margin-top:8px">${Object.entries(NOTE_KIND).map(([k, v]) => `<label class="chk" style="color:inherit;font-size:14px;margin:0"><input type="radio" name="inKind" value="${k}" ${k === (ui.lastKind || "mtg") ? "checked" : ""}>${v}</label>`).join("")}</div>
-      <div class="f2" style="margin-top:6px;grid-template-columns:140px 1fr"><input id="inDate" type="date" value="${ui.lastNoteDate && Date.now() - ui.lastNoteAt < 3 * 3600000 ? ui.lastNoteDate : todayStr()}"><textarea id="inText" style="min-height:44px" placeholder="例：弁護士に相談、○○の方向で進めることに。検品は○○さんに依頼"></textarea></div>
-      <button class="btn sm" style="margin-top:6px" onclick="addIssueNote('${id}')">経過メモを追加</button></div>` : `<div class="hint">経過メモは、保存したあとに書き足せます。</div>`}
+      ${noteInput()}
+      <button class="btn sm" style="margin-top:6px" onclick="addIssueNote('${id}')">経過メモを追加</button></div>` : `<div class="f"><label>最初の経過メモ（あれば）</label>${noteInput()}</div>`}
     <div class="mact">${id ? `<button class="btn danger" style="margin-right:auto" onclick="delIssue('${id}')">削除</button>` : ""}<button class="btn" onclick="closeModal()">キャンセル</button><button class="btn pri" onclick="saveIssue(${id ? `'${id}'` : ""})">保存</button></div>`);
 }
 function issueForm() {
@@ -1303,6 +1304,10 @@ async function saveIssue(id) {
   d.doneAt = d.status === "done" ? (old?.status === "done" ? old.doneAt || Date.now() : Date.now()) : null;
   d.updatedAt = Date.now();
   const nid = id || uid();
+  if (!id && $("inText").value.trim()) {
+    const k = document.querySelector("input[name=inKind]:checked")?.value || "other", n = { date: $("inDate").value, kind: k, text: $("inText").value.trim(), at: Date.now(), by: auth?.email || "demo" };
+    d.notes = { [uid()]: n }; ui.lastKind = k; ui.lastNoteDate = n.date; ui.lastNoteAt = Date.now();
+  }
   state.issues[nid] = { ...(old || { createdAt: Date.now(), by: auth?.email || "demo" }), ...d };
   closeModal(); render(); toast("保存しました");
   await save(id ? "PATCH" : "PUT", `issues/${nid}`, id ? d : state.issues[nid]);
