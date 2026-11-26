@@ -316,10 +316,10 @@ const LEAVE_CHECKS = { date: "退会日を確定した", pay: "月額などの�
 const leaveDone = m => Object.keys(LEAVE_CHECKS).filter(k => m.leaveChecks?.[k]).length;
 const stTag = st => st && st !== "active" ? ` <span class="tag ${st === "leaving" ? "t-orange" : "t-gray"}">${STATUS[st]}</span>` : "";
 
-let state = { members: {}, meetings: {}, payments: {}, arrears: {}, logs: {} };
+let state = { members: {}, meetings: {}, payments: {}, arrears: {}, logs: {}, formTokens: {}, formSubs: {}, formLookup: {} };
 const CHECK = { unchecked: "未確認", has: "未入金あり", none: "未入金なし" };
 const ARR_ST = { unpaid: "未入金", settled: "精算済み" };
-const EVID = { line: "LINE", mail: "メール", apply: "買取依頼書・買取申請", slip: "納品書・発送伝票", bank: "振込・取引明細", photo: "写真・スクショ", other: "その他" };
+const EVID = { line: "LINE", mail: "メール", apply: "買取依頼書・買取申請", form: "回答フォーム", slip: "納品書・発送伝票", bank: "振込・取引明細", photo: "写真・スクショ", other: "その他" };
 const EV_ST = { pending: "まだ集めていない", requested: "会員に提出を依頼中", none: "存在しない（口頭のみ等）" };
 const hasEvid = x => (x.evidence || []).some(k => EVID[k]);
 // 証拠の状況：have=あり / pending=未収集 / requested=依頼中 / none=存在しない
@@ -463,7 +463,7 @@ async function save(method, path, body) {
 async function loadAll() {
   if (DEMO) return;
   const d = await db("GET", "") || {};
-  state.members = d.members || {}; state.meetings = d.meetings || {}; state.payments = d.payments || {}; state.arrears = d.arrears || {}; state.logs = d.logs || {};
+  state.members = d.members || {}; state.meetings = d.meetings || {}; state.payments = d.payments || {}; state.arrears = d.arrears || {}; state.logs = d.logs || {}; state.formTokens = d.formTokens || {}; state.formSubs = d.formSubs || {};
 }
 
 /* ---------- 計算 ---------- */
@@ -723,6 +723,7 @@ function renderDetail() {
   ${(() => { const al = arrOf(id); return `<div class="card">
     <div class="dhead"><h3 style="margin:0">GAIN未入金 <span class="tag ${m.gainCheck === "has" ? "t-red" : m.gainCheck === "none" ? "t-green" : "t-gray"}">聞き取り：${CHECK[m.gainCheck || "unchecked"]}</span></h3>
       <div style="margin-left:auto;display:flex;gap:6px;flex-wrap:wrap">${Object.entries(CHECK).map(([k, v]) => `<button class="btn sm ${(m.gainCheck || "unchecked") === k ? "pri" : ""}" onclick="setCheck('${id}','${k}')">${v}</button>`).join("")}<button class="btn sm gold" onclick="openArrear('${id}')">＋ 追加</button></div></div>
+    ${subsOf(id).length ? `<div class="meta" style="margin-top:6px">フォームの回答：${subsOf(id).map(x => `${new Date(x.at).toLocaleDateString("ja-JP")} ${ANS[x.answer] || ""}${x.processed ? "（処理済み）" : "（未処理）"}`).join("　/　")}</div>` : ""}
     ${al.length ? `<div style="margin:8px 0 4px">未入金 <b class="red">${arrSum(al, "unpaid").toLocaleString()}円</b>${arrSum(al, "settled") ? `　<span class="meta">精算済み ${arrSum(al, "settled").toLocaleString()}円</span>` : ""}</div>${arrTable(al, id)}` : `<div class="empty">記録はありません</div>`}
   </div>`; })()}
   ${(() => { const lg = logsOf(id), w = warnCount(id); return `<div class="card">
@@ -817,7 +818,8 @@ function renderArrears() {
   const openCnt = all.filter(isOpen).length, qtyAll = openQty(all);
   list.sort((a, b) => b.unpaid - a.unpaid || b.open - a.open || byNo(a.m, b.m));
   const chip = (v, label) => `<button class="chip ${f === v ? "on" : ""}" onclick="ui.arrFilter='${v}';renderArrears()">${label}</button>`;
-  $("v-arrears").innerHTML = pbar("GAIN未入金", `<button class="btn" onclick="exportArrCSV()">CSVで書き出し</button><button class="btn" onclick="window.print()">印刷・PDF</button><button class="btn gold" onclick="openArrear()">＋ 未入金を追加</button>`) + `
+  $("v-arrears").innerHTML = pbar("GAIN未入金", `<button class="btn" onclick="openFormLinks()">回答フォームのURL</button><button class="btn" onclick="exportArrCSV()">CSVで書き出し</button><button class="btn" onclick="window.print()">印刷・PDF</button><button class="btn gold" onclick="openArrear()">＋ 未入金を追加</button>`) + `
+  ${renderFormSubs()}
   <div class="printonly"><h2>GILD　GAIN代表による会員への未入金一覧（${fmtDY(todayStr())} 時点）</h2></div>
   <div class="grid3">
     <div class="card stat"><div class="hint">未入金 合計</div><div class="num red">${total.toLocaleString()}<small>円</small></div><div class="meta">${openCnt}件・${qtyAll}個</div>${unkCnt ? `<div class="meta" style="color:#a8661c">ほかに金額未確定 ${unkCnt}件</div>` : ""}${dateCnt ? `<div class="meta" style="color:#a8661c">日付不明 ${dateCnt}件</div>` : ""}${needAmt ? `<div class="meta">うち証拠を集める必要あり ${needAmt.toLocaleString()}円</div>` : ""}${noAmt ? `<div class="meta">うち証拠が存在しない ${noAmt.toLocaleString()}円</div>` : ""}</div>
@@ -988,6 +990,115 @@ function doFeeBulk() {
     render(); toast(`${n}人分を設定しました`);
     const body = {}; for (const [id, p] of Object.entries(patches)) for (const [k, v] of Object.entries(p)) body[`${id}/${k}`] = v;
     await save("PATCH", "members", body);
+  });
+}
+
+/* ---------- 回答フォーム ---------- */
+const FORM_URL = () => location.origin + location.pathname.replace(/[^/]*\.html$/, "").replace(/\/?$/, "/") + "form.html?t=";
+const ANS = { none: "該当なし", has: "該当あり", checking: "確認中" };
+const newToken = () => Array.from(crypto.getRandomValues(new Uint8Array(15)), b => (b % 36).toString(36)).join("") + Date.now().toString(36).slice(-4);
+const subsOf = id => { const t = state.members[id]?.formToken; return t ? Object.entries(state.formSubs[t] || {}).map(([sid, x]) => ({ sid, t, ...x })).sort((a, b) => a.at - b.at) : []; };
+const FORM_MSG_DEFAULT = `お疲れ様です。
+ハヤトさんの退任に伴い、MNPキャッシュバックや商品代金などで、まだ入金されていないものがないか確認しています。
+記録を残すため、全員にご回答をお願いしています。
+
+下のURLを開いて、「該当なし・該当あり・確認中」のどれかを選び、該当がある場合は内容を入力して送信してください。
+{URL}
+
+回答は11/30（月）午前中までにお願いします。
+期限までにご回答がない場合は、現時点で該当なしとして集計を進めます。期限後のお申し出については、個別に対応を判断させていただきますので、あらかじめご了承ください。
+よろしくお願いします。`;
+const normPhone = p => String(p || "").replace(/[０-９]/g, c => String.fromCharCode(c.charCodeAt(0) - 0xFEE0)).replace(/\D/g, "");
+async function phoneHash(p) { const b = await crypto.subtle.digest("SHA-256", new TextEncoder().encode("gild:" + normPhone(p))); return Array.from(new Uint8Array(b), x => x.toString(16).padStart(2, "0")).join(""); }
+async function ensureLookup() {
+  // 電話番号（変換した値）→ 回答URLの対応表。電話番号そのものは保存しない
+  const map = {};
+  for (const m of membersArr().filter(m => m.status !== "left" && m.formToken && normPhone(m.phone).length >= 10)) {
+    const h = await phoneHash(m.phone); (map[h] = map[h] || {})[m.formToken] = state.formTokens[m.formToken]?.label || m.nick || "";
+  }
+  state.formLookup = map; await save("PUT", "formLookup", map);
+}
+async function ensureTokens() {
+  const patchM = {}, patchT = {};
+  membersArr().filter(m => m.status !== "left").forEach(m => {
+    if (m.formToken && state.formTokens[m.formToken]) return;
+    const t = m.formToken || newToken();
+    state.members[m.id].formToken = t; patchM[`${m.id}/formToken`] = t;
+    state.formTokens[t] = { memberId: m.id, label: m.nick || m.name.split(/\s/)[0] }; patchT[t] = state.formTokens[t];
+  });
+  if (Object.keys(patchM).length) { await save("PATCH", "members", patchM); await save("PATCH", "formTokens", patchT); }
+}
+async function openFormLinks() {
+  await ensureTokens(); await ensureLookup();
+  const noPhone = membersArr().filter(m => m.status !== "left" && normPhone(m.phone).length < 10).sort(byNo);
+  const common = FORM_URL().replace(/\?t=$/, "");
+  let cmsg = ""; try { cmsg = localStorage.getItem("gildFormMsgCommon") || ""; } catch (e) {}
+  const list = membersArr().filter(m => m.status !== "left").sort(byNo);
+  let msg = ""; try { msg = localStorage.getItem("gildFormMsg") || ""; } catch (e) {}
+  modal(`<h3>回答フォームのURL</h3>
+    <div class="card" style="background:#faf9f5;margin-bottom:14px">
+      <b>共通のURL（全員に同じURLを送れます）</b>
+      <p class="hint" style="margin:4px 0 8px">開くと電話番号の入力を求められ、会員管理に登録されている電話番号と合った人だけが、自分の回答画面に進めます。</p>
+      <div class="f"><textarea id="flMsgC" style="min-height:150px" oninput="try{localStorage.setItem('gildFormMsgCommon',this.value)}catch(e){}">${esc(cmsg || FORM_MSG_DEFAULT.replace("下のURLを開いて、", "下のURLを開き、登録している電話番号を入力してから、"))}</textarea></div>
+      <button class="btn sm gold" onclick="copyText($('flMsgC').value.replace('{URL}','${common}'),this)">共通URLの文章をコピー</button> <button class="btn sm" onclick="copyText('${common}',this)">URLだけ</button>
+      ${noPhone.length ? `<div class="err" style="margin-top:8px">電話番号が登録されていない会員（${noPhone.length}人）は共通URLを使えません。下の個別URLを送るか、会員ページで電話番号を登録してから開き直してください：${noPhone.map(m => esc(((m.salonNo || "") + " " + m.name).trim())).join("、")}</div>` : `<div class="meta" style="margin-top:8px">全員の電話番号が登録されています。</div>`}
+    </div>
+    <b>個別のURL（会員ごとに別のURLです）</b>
+    <p class="hint">「文章をコピー」を押すと、その会員専用のURLが入った文章がコピーされます。それぞれの会員の個別LINEに貼り付けて送ってください。<b>URLを他の会員に送らないよう注意してください</b>（その人として回答できてしまいます）。</p>
+    <div class="f"><label>送る文章（{URL} の部分に、その会員のURLが入ります）</label><textarea id="flMsg" style="min-height:170px" oninput="try{localStorage.setItem('gildFormMsg',this.value)}catch(e){}">${esc(msg || FORM_MSG_DEFAULT)}</textarea></div>
+    <div style="max-height:340px;overflow:auto;border:1px solid var(--line);border-radius:8px"><table class="tbl" style="border:0">
+      <tr><th>No</th><th>氏名（サロン名）</th><th>回答</th><th></th></tr>
+      ${list.map(m => { const sb = subsOf(m.id), last = sb[sb.length - 1];
+        return `<tr><td>${esc(m.salonNo || "")}</td><td>${esc(m.name)}${m.nick ? `（${esc(m.nick)}）` : ""}</td>
+          <td>${last ? `<span class="tag ${last.answer === "has" ? "t-red" : last.answer === "none" ? "t-green" : "t-orange"}">${ANS[last.answer] || ""}</span> <span class="meta">${new Date(last.at).toLocaleDateString("ja-JP")}</span>` : `<span class="meta">未回答</span>`}</td>
+          <td style="white-space:nowrap"><button class="btn sm" onclick="copyFormMsg('${m.id}',this)">文章をコピー</button> <button class="btn sm" onclick="copyFormUrl('${m.id}',this)">URLだけ</button></td></tr>`; }).join("")}
+    </table></div>
+    <div class="mact"><button class="btn pri" onclick="closeModal()">閉じる</button></div>`);
+}
+async function copyText(t, btn) {
+  try { await navigator.clipboard.writeText(t); } catch (e) { const a = document.createElement("textarea"); a.value = t; document.body.appendChild(a); a.select(); document.execCommand("copy"); a.remove(); }
+  if (btn) { const o = btn.textContent; btn.textContent = "コピーしました"; setTimeout(() => btn.textContent = o, 1500); }
+}
+function copyFormMsg(id, btn) { const url = FORM_URL() + state.members[id].formToken; copyText($("flMsg").value.replace("{URL}", url), btn); }
+function copyFormUrl(id, btn) { copyText(FORM_URL() + state.members[id].formToken, btn); }
+function renderFormSubs() {
+  const subs = [];
+  Object.entries(state.formSubs || {}).forEach(([t, o]) => { const mid = state.formTokens[t]?.memberId; Object.entries(o || {}).forEach(([sid, x]) => { if (!x.processed) subs.push({ t, sid, mid, ...x }); }); });
+  if (!subs.length) return "";
+  subs.sort((a, b) => a.at - b.at);
+  return `<div class="card" style="border-color:#ecd3a9"><h3>フォームの回答（未処理）<span class="cnt">${subs.length}</span><span class="meta" style="font-weight:400;margin-left:8px">内容を確認して「取り込む」を押すと、GAIN未入金に反映されます</span></h3>
+    ${subs.map(x => { const m = state.members[x.mid] || {};
+      return `<div class="row" style="align-items:flex-start"><div class="grow"><b>${esc(m.salonNo || "")} ${esc(m.name || "不明")}</b>${m.nick ? ` <span class="meta">（${esc(m.nick)}）</span>` : ""}
+        <span class="tag ${x.answer === "has" ? "t-red" : x.answer === "none" ? "t-green" : "t-orange"}">${ANS[x.answer] || ""}</span> <span class="meta">${new Date(x.at).toLocaleString("ja-JP")}</span>
+        <pre style="white-space:pre-wrap;font-family:inherit;font-size:13px;background:#faf9f5;border-radius:6px;padding:8px 10px;margin:6px 0 0">${esc(x.summary || "")}</pre></div>
+        <div style="display:flex;flex-direction:column;gap:6px"><button class="btn sm gold" onclick="importSub('${x.t}','${x.sid}')">取り込む</button><button class="btn sm" onclick="dismissSub('${x.t}','${x.sid}')">取り込まずに処理済み</button></div></div>`; }).join("")}
+  </div>`;
+}
+async function importSub(t, sid) {
+  const x = state.formSubs[t][sid], mid = state.formTokens[t]?.memberId, m = state.members[mid];
+  if (!m) { alert("会員が見つかりません"); return; }
+  const when = new Date(x.at).toLocaleDateString("ja-JP"), add = {};
+  (x.items || []).forEach(it => {
+    const id = uid();
+    add[id] = { memberId: mid, date: it.date || "", status: "unpaid",
+      item: it.kind === "mnp" ? `MNPキャッシュバック（${it.carrier || "キャリア不明"}）` : it.name,
+      qty: it.qty ?? null, unitPrice: null, amount: it.amount ?? null,
+      evidence: [], evStatus: "pending", evidenceNote: "",
+      note: `${when} 回答フォームで申告${x.memo ? "／補足：" + x.memo : ""}`, createdAt: Date.now(), by: auth?.email || "demo" };
+  });
+  const check = x.answer === "has" ? "has" : x.answer === "none" ? "none" : (m.gainCheck || "unchecked");
+  confirmBox(`${m.name}さんの回答（${ANS[x.answer]}）を取り込みます。${Object.keys(add).length ? `未入金 ${Object.keys(add).length}件を追加し、` : ""}聞き取りを「${CHECK[check]}」にします。`, async () => {
+    Object.assign(state.arrears, add); m.gainCheck = check; x.processed = true;
+    render(); toast("取り込みました");
+    if (Object.keys(add).length) await save("PATCH", "arrears", add);
+    await save("PATCH", `members/${mid}`, { gainCheck: check });
+    await save("PATCH", `formSubs/${t}/${sid}`, { processed: true, processedAt: Date.now() });
+  });
+}
+function dismissSub(t, sid) {
+  confirmBox("この回答を取り込まずに処理済みにしますか？（回答の内容は残ります）", async () => {
+    state.formSubs[t][sid].processed = true; render(); toast("処理済みにしました");
+    await save("PATCH", `formSubs/${t}/${sid}`, { processed: true, processedAt: Date.now() });
   });
 }
 
