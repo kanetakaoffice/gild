@@ -1218,6 +1218,9 @@ function delMeeting(mid) {
 const OWNERS = { hina: "Hina", hak: "HAK代表", kanetaka: "KANETAKA代表" };
 const OWNER_EMAIL = { "kanetaka.hinako_02@icloud.com": "hina", "dorainpact@gmail.com": "hak", "kanetaka.koki_01@icloud.com": "kanetaka" };
 const ISS_ST = { todo: "未着手", doing: "対応中", done: "完了" };
+const NOTE_KIND = { lawyer: "弁護士相談", mtg: "運営MTG", other: "その他" };
+const kindTag = n => n.kind && NOTE_KIND[n.kind] ? `<span class="tag ${n.kind === "lawyer" ? "t-red" : n.kind === "mtg" ? "t-store" : "t-gray"}">${NOTE_KIND[n.kind]}</span> ` : "";
+const hasLawyer = x => notesOf(x).some(n => n.kind === "lawyer");
 const myOwner = () => DEMO ? "hina" : OWNER_EMAIL[auth?.email] || "";
 const issuesArr = () => Object.entries(state.issues || {}).map(([id, x]) => ({ id, ...x }));
 const notesOf = x => Object.entries(x.notes || {}).map(([nid, n]) => ({ nid, ...n })).sort((a, b) => (a.date || "").localeCompare(b.date || "") || (a.at || 0) - (b.at || 0));
@@ -1236,13 +1239,14 @@ function dueTag(x) {
 }
 const stTagI = x => `<span class="tag ${x.status === "done" ? "t-green" : x.status === "doing" ? "t-orange" : "t-gray"}">${ISS_ST[x.status || "todo"]}</span>`;
 const careItems = () => { const out = []; membersArr().filter(m => m.status !== "left").forEach(m => openCare(m.id).forEach(x => out.push({ m, x }))); return out.sort((a, b) => (b.x.date || "").localeCompare(a.x.date || "") || byNo(a.m, b.m)); };
-function issRow(x, compact) {
+function issRow(x, compact, lawyerOnly) {
   const ns = notesOf(x), last = ns[ns.length - 1], m = x.memberId && state.members[x.memberId];
   return `<div class="row rowlink" style="align-items:flex-start" onclick="openIssue('${x.id}')"><div class="grow">
     <b>${esc(x.title)}</b> ${stTagI(x)} ${dueTag(x)}
     <div class="meta">担当：${x.owners?.length ? esc(ownerNames(x)) : "未定"}${m ? "　関連する会員：" + esc(m.name) + (m.nick ? "（" + esc(m.nick) + "）" : "") : ""}</div>
     ${!compact && x.plan ? `<div class="iss-plan"><span class="meta">方針：</span>${esc(x.plan)}</div>` : ""}
-    ${last ? `<div class="meta" style="margin-top:2px">最新の経過（${last.date ? fmtD(last.date) : "日付不明"}）：${esc(last.text.length > 60 ? last.text.slice(0, 60) + "…" : last.text)}</div>` : ""}
+    ${lawyerOnly ? ns.filter(n => n.kind === "lawyer").map(n => `<div class="iss-note" style="border-color:#e3b4ad">${kindTag(n)}<span class="meta">${n.date ? fmtDY(n.date) : "日付不明"}</span><br>${esc(n.text)}</div>`).join("")
+      : last ? `<div class="meta" style="margin-top:2px">最新の経過（${last.date ? fmtD(last.date) : "日付不明"}）：${kindTag(last)}${esc(last.text.length > 60 ? last.text.slice(0, 60) + "…" : last.text)}</div>` : ""}
   </div>${x.status !== "done" ? `<button class="btn sm" onclick="event.stopPropagation();setIssueSt('${x.id}','done')">完了にする</button>` : `<button class="btn sm" onclick="event.stopPropagation();setIssueSt('${x.id}','doing')">未完了に戻す</button>`}</div>`;
 }
 function careRow({ m, x }) {
@@ -1257,15 +1261,17 @@ function renderIssues() {
     : f === "mine" ? open.filter(x => (x.owners || []).includes(me)).sort(issSort)
     : f === "over" ? open.filter(x => x.due && daysFrom(x.due) < 0).sort(issSort)
     : f === "all" ? [...open.sort(issSort), ...all.filter(x => x.status === "done")]
+    : f === "lawyer" ? all.filter(hasLawyer).sort((a, b) => (a.status === "done") - (b.status === "done") || issSort(a, b))
     : open.sort(issSort);
   const showCare = f === "open" || f === "all";
   const chip = (v, label) => `<button class="chip ${f === v ? "on" : ""}" onclick="ui.issFilter='${v}';renderIssues()">${label}</button>`;
   const over = open.filter(x => x.due && daysFrom(x.due) < 0).length;
   $("v-issues").innerHTML = pbar("運営課題", `<button class="btn pri" onclick="openIssue()">＋ 課題を追加</button>`) + `
   <p class="hint" style="margin:0 0 12px">運営の3人で共有する課題です。会員とのミーティングで出た「運営側でやること」も、ここにまとめて表示されます。</p>
-  <div class="chips" style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:14px">${chip("open", `未完了（${open.length + cares.length}）`)}${chip("mine", `自分が担当（${open.filter(x => (x.owners || []).includes(me)).length}）`)}${chip("over", `期限切れ（${over}）`)}${chip("done", "完了したもの")}${chip("all", "すべて")}</div>
+  <div class="chips" style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:14px">${chip("open", `未完了（${open.length + cares.length}）`)}${chip("mine", `自分が担当（${open.filter(x => (x.owners || []).includes(me)).length}）`)}${chip("over", `期限切れ（${over}）`)}${chip("lawyer", `弁護士相談（${all.filter(hasLawyer).length}）`)}${chip("done", "完了したもの")}${chip("all", "すべて")}</div>
   <div class="card">
-    ${list.length ? list.map(x => issRow(x)).join("") : `<div class="empty">${f === "done" ? "完了した課題はまだありません" : "該当する課題はありません"}</div>`}
+    ${f === "lawyer" ? `<div class="hint" style="margin-bottom:4px">弁護士相談の経過メモがある課題です（完了したものも含みます）。弁護士相談のメモだけを表示しています。</div>` : ""}
+    ${list.length ? list.map(x => issRow(x, false, f === "lawyer")).join("") : `<div class="empty">${f === "done" ? "完了した課題はまだありません" : f === "lawyer" ? "弁護士相談の経過メモはまだありません" : "該当する課題はありません"}</div>`}
   </div>
   ${showCare ? `<div class="card"><h3>ミーティングから（運営側でやること）<span class="cnt">${cares.length}</span></h3>${cares.length ? cares.map(careRow).join("") : `<div class="empty">未対応のものはありません</div>`}</div>` : ""}`;
 }
@@ -1281,8 +1287,9 @@ function openIssue(id) {
     <div class="f"><label>状態</label><select id="isSt">${Object.entries(ISS_ST).map(([k, v]) => `<option value="${k}" ${(x.status || "todo") === k ? "selected" : ""}>${v}</option>`).join("")}</select></div></div>
     <div class="f"><label>関連する会員（あれば）</label><select id="isMem"><option value="">—</option>${mem.map(m => `<option value="${m.id}" ${x.memberId === m.id ? "selected" : ""}>${esc((m.salonNo ? m.salonNo + " " : "") + m.name + (m.nick ? "（" + m.nick + "）" : ""))}</option>`).join("")}</select></div>
     ${id ? `<div class="f"><label>経過メモ（日付付きで書き足していきます）</label>
-      ${ns.length ? ns.map(n => `<div class="iss-note"><span class="meta">${n.date ? fmtDY(n.date) : "日付不明"}${n.by ? "　" + esc(OWNERS[OWNER_EMAIL[n.by]] || "") : ""}</span>　<button class="btn sm" style="padding:0 6px;font-size:11px" onclick="delIssueNote('${id}','${n.nid}')">削除</button><br>${esc(n.text)}</div>`).join("") : `<div class="hint">まだありません</div>`}
-      <div class="f2" style="margin-top:8px;grid-template-columns:140px 1fr"><input id="inDate" type="date" value="${todayStr()}"><textarea id="inText" style="min-height:44px" placeholder="例：弁護士に相談、○○の方向で進めることに。検品は○○さんに依頼"></textarea></div>
+      ${ns.length ? ns.map(n => `<div class="iss-note" ${n.kind === "lawyer" ? `style="border-color:#e3b4ad"` : ""}>${kindTag(n)}<span class="meta">${n.date ? fmtDY(n.date) : "日付不明"}${n.by ? "　" + esc(OWNERS[OWNER_EMAIL[n.by]] || "") : ""}</span>　<button class="btn sm" style="padding:0 6px;font-size:11px" onclick="delIssueNote('${id}','${n.nid}')">削除</button><br>${esc(n.text)}</div>`).join("") : `<div class="hint">まだありません</div>`}
+      <div style="display:flex;flex-wrap:wrap;gap:4px 14px;margin-top:8px">${Object.entries(NOTE_KIND).map(([k, v]) => `<label class="chk" style="color:inherit;font-size:14px;margin:0"><input type="radio" name="inKind" value="${k}" ${k === (ui.lastKind || "mtg") ? "checked" : ""}>${v}</label>`).join("")}</div>
+      <div class="f2" style="margin-top:6px;grid-template-columns:140px 1fr"><input id="inDate" type="date" value="${ui.lastNoteDate && Date.now() - ui.lastNoteAt < 3 * 3600000 ? ui.lastNoteDate : todayStr()}"><textarea id="inText" style="min-height:44px" placeholder="例：弁護士に相談、○○の方向で進めることに。検品は○○さんに依頼"></textarea></div>
       <button class="btn sm" style="margin-top:6px" onclick="addIssueNote('${id}')">経過メモを追加</button></div>` : `<div class="hint">経過メモは、保存したあとに書き足せます。</div>`}
     <div class="mact">${id ? `<button class="btn danger" style="margin-right:auto" onclick="delIssue('${id}')">削除</button>` : ""}<button class="btn" onclick="closeModal()">キャンセル</button><button class="btn pri" onclick="saveIssue(${id ? `'${id}'` : ""})">保存</button></div>`);
 }
@@ -1308,7 +1315,8 @@ async function setIssueSt(id, st) {
 async function addIssueNote(id) {
   const text = $("inText").value.trim();
   if (!text) { alert("経過メモを入力してください"); return; }
-  const keep = issueForm(), nid = uid(), n = { date: $("inDate").value, text, at: Date.now(), by: auth?.email || "demo" };
+  const keep = issueForm(), nid = uid(), n = { date: $("inDate").value, kind: document.querySelector("input[name=inKind]:checked")?.value || "other", text, at: Date.now(), by: auth?.email || "demo" };
+  ui.lastKind = n.kind; ui.lastNoteDate = n.date; ui.lastNoteAt = Date.now(); // 同じ相談のメモを続けて入れやすくする
   const x = state.issues[id]; x.notes = { ...(x.notes || {}), [nid]: n };
   openIssue(id); restoreIssueForm(keep); toast("経過メモを追加しました");
   await save("PUT", `issues/${id}/notes/${nid}`, n);
@@ -1568,7 +1576,7 @@ function exportCSV() {
 function demoIssues() {
   const t = new Date(), d = n => { const x = new Date(t); x.setDate(x.getDate() + n); return x.toLocaleDateString("sv-SE"); };
   state.issues = {
-    i1: { title: "HAYATO未入金の精算をどう進めるか", plan: "会員ごとの未入金を回答フォームで集めて、弁護士に相談する", owners: ["hina", "kanetaka"], due: d(3), status: "doing", createdAt: 1, notes: { n1: { date: d(-2), text: "回答フォームを会員に送付", at: 1 } } },
+    i1: { title: "HAYATO未入金の精算をどう進めるか", plan: "会員ごとの未入金を回答フォームで集めて、弁護士に相談する", owners: ["hina", "kanetaka"], due: d(3), status: "doing", createdAt: 1, notes: { n1: { date: d(-2), kind: "mtg", text: "回答フォームを会員に送付", at: 1 }, n2: { date: d(0), kind: "lawyer", text: "立て替えるなら生徒からの証拠が必須", at: 2 } } },
     i2: { title: "1月からの契約書の準備", plan: "", owners: ["hak"], due: d(-1), status: "todo", createdAt: 2 },
     i3: { title: "退会予定者の手続きの進め方を決める", owners: [], status: "todo", createdAt: 3 }
   };
