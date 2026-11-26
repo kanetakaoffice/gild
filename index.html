@@ -83,6 +83,15 @@ h3{font-size:15px;margin:0 0 8px}
 .chips{display:flex;gap:4px;flex-wrap:wrap}
 .chip{border:1px solid var(--line);background:#fff;border-radius:14px;padding:3px 11px;font-size:12px}
 .iss-note{font-size:13px;border-left:3px solid var(--line);padding:2px 0 2px 10px;margin:6px 0;white-space:pre-wrap}
+.iss-grid{display:grid;grid-template-columns:minmax(320px,2fr) 3fr;gap:16px;align-items:start}
+.iss-side{position:sticky;top:96px;max-height:calc(100vh - 116px);overflow:auto;margin:0}
+.iss-row.sel{background:var(--gold-soft)}
+.iss-row .chev2{color:#b9ad97;font-size:11px;align-self:center}
+.iss-inline .iss-dtitle{visibility:hidden}
+@media (max-width:560px){.nin{grid-template-columns:1fr!important}}
+.iss-inline{border:1px solid var(--line);border-radius:10px;padding:14px;margin:4px 0 10px;background:#fff}
+.iss-dl{display:grid;grid-template-columns:auto 1fr;gap:4px 14px;margin:0 0 6px;font-size:14px}.iss-dl dt{color:#888;font-size:13px}.iss-dl dd{margin:0}
+.iss-sec{font-weight:700;font-size:13px;color:#555;margin:14px 0 6px;padding-top:10px;border-top:1px solid var(--line)}
 .iss-plan{font-size:13px;white-space:pre-wrap;margin-top:3px;color:#444}
 .chip.on{background:var(--dark);color:#fff;border-color:var(--dark)}
 
@@ -600,7 +609,7 @@ function renderHome() {
     </div>
     <div>
       <div class="card" id="hCare"><h3 style="display:flex;align-items:center">運営の課題・やること<span class="cnt">${todo.length}</span><button class="btn sm" style="margin-left:auto" onclick="openIssue()">＋ 課題を追加</button></h3>
-        ${todo.length ? cut(todo, "care").map(t => t.iss ? issRow(t.iss, true) : careRow(t)).join("") + more("care", todo.length) : `<div class="empty">未完了のものはありません</div>`}
+        ${todo.length ? cut(todo, "care").map(t => t.iss ? issRow(t.iss) : careRow(t)).join("") + more("care", todo.length) : `<div class="empty">未完了のものはありません</div>`}
       </div>
       <div class="card"><h3>フォローが必要<span class="cnt">${idle.length}</span><span class="meta" style="font-weight:400;margin-left:8px">${CONFIG.idleDays}日以上ミーティングなし・次回未定</span></h3>
         ${idle.length ? cut(idle, "idle").map(m => `<div class="row rowlink" onclick="openRow('${m.id}')"><div class="grow">${nm(m)} ${courseTag(m.course)}<div class="meta">前回：${lastLabel(m.id, true)}</div></div><button class="btn sm" onclick="event.stopPropagation();openMember('${m.id}')">次回MTGを入れる</button></div>`).join("") + more("idle", idle.length) : `<div class="empty">該当する会員はいません</div>`}
@@ -1240,15 +1249,38 @@ function dueTag(x) {
 }
 const stTagI = x => `<span class="tag ${x.status === "done" ? "t-green" : x.status === "doing" ? "t-orange" : "t-gray"}">${ISS_ST[x.status || "todo"]}</span>`;
 const careItems = () => { const out = []; membersArr().filter(m => m.status !== "left").forEach(m => openCare(m.id).forEach(x => out.push({ m, x }))); return out.sort((a, b) => (b.x.date || "").localeCompare(a.x.date || "") || byNo(a.m, b.m)); };
-function issRow(x, compact, lawyerOnly) {
-  const ns = notesOf(x), last = ns[ns.length - 1], m = x.memberId && state.members[x.memberId];
-  return `<div class="row rowlink" style="align-items:flex-start" onclick="openIssue('${x.id}')"><div class="grow">
-    <b>${esc(x.title)}</b> ${stTagI(x)} ${dueTag(x)}
-    <div class="meta">担当：${x.owners?.length ? esc(ownerNames(x)) : "未定"}${m ? "　関連する会員：" + esc(m.name) + (m.nick ? "（" + esc(m.nick) + "）" : "") : ""}</div>
-    ${!compact && x.plan ? `<div class="iss-plan"><span class="meta">方針：</span>${esc(x.plan)}</div>` : ""}
-    ${lawyerOnly ? ns.filter(n => n.kind === "lawyer").map(n => `<div class="iss-note" style="border-color:#e3b4ad">${kindTag(n)}<span class="meta">${n.date ? fmtDY(n.date) : "日付不明"}</span><br>${esc(n.text)}</div>`).join("")
-      : last ? `<div class="meta" style="margin-top:2px">最新の経過（${last.date ? fmtD(last.date) : "日付不明"}）：${kindTag(last)}${esc(last.text.length > 60 ? last.text.slice(0, 60) + "…" : last.text)}</div>` : ""}
-  </div>${x.status !== "done" ? `<button class="btn sm" onclick="event.stopPropagation();setIssueSt('${x.id}','done')">完了にする</button>` : `<button class="btn sm" onclick="event.stopPropagation();setIssueSt('${x.id}','doing')">未完了に戻す</button>`}</div>`;
+const issWide = () => window.matchMedia("(min-width:1100px)").matches;
+function issRow(x) { // 一覧の1行（課題名・状態・期限・担当だけ）
+  const ns = notesOf(x), last = ns[ns.length - 1], sel = ui.tab === "issues" && ui.issSel === x.id;
+  return `<div class="row rowlink iss-row ${sel ? "sel" : ""}" onclick="selIssue('${x.id}')"><div class="grow">
+    <div><b>${esc(x.title)}</b> ${stTagI(x)} ${dueTag(x)}</div>
+    <div class="meta">担当：${x.owners?.length ? esc(ownerNames(x)) : "未定"}${last ? `　最新の経過：${last.date ? fmtD(last.date) : "日付不明"} ${kindTag(last)}` : ""}</div>
+  </div>${ui.tab === "issues" ? `<span class="chev2">${sel && !issWide() ? "▲" : "▶"}</span>` : ""}</div>`;
+}
+function selIssue(id) {
+  if (ui.tab !== "issues") { ui.issSel = id; ui.issFilter = state.issues[id]?.status === "done" ? "done" : "open"; go("issues"); return; }
+  ui.issSel = ui.issSel === id && !issWide() ? null : id; // スマホでは同じ課題をもう一度押すと閉じる
+  renderIssues();
+  if (!issWide()) document.querySelector(".iss-row.sel")?.scrollIntoView({ block: "nearest", behavior: "smooth" });
+}
+function issDetail(x) { // 開いた中身（方針の全文と経過メモ）
+  const ns = notesOf(x).reverse(), m = x.memberId && state.members[x.memberId];
+  return `<div class="iss-detail">
+    <div style="display:flex;gap:8px;align-items:flex-start"><h3 class="iss-dtitle" style="margin:0;flex:1;font-size:17px">${esc(x.title)}</h3>
+      <button class="btn sm" onclick="openIssue('${x.id}')">編集</button>
+      ${x.status !== "done" ? `<button class="btn sm" onclick="setIssueSt('${x.id}','done')">完了にする</button>` : `<button class="btn sm" onclick="setIssueSt('${x.id}','doing')">未完了に戻す</button>`}</div>
+    <div style="margin:6px 0 10px">${stTagI(x)} ${dueTag(x) || (x.due ? `<span class="tag t-gray">期限 ${fmtD(x.due)}</span>` : "")}</div>
+    <dl class="iss-dl"><dt>担当</dt><dd>${x.owners?.length ? esc(ownerNames(x)) : "未定"}</dd>
+      ${x.due ? `<dt>期限</dt><dd>${fmtDY(x.due)}</dd>` : ""}
+      ${m ? `<dt>関連する会員</dt><dd><a href="javascript:void 0" onclick="openRow('${x.memberId}')">${esc(m.name)}${m.nick ? "（" + esc(m.nick) + "）" : ""}</a></dd>` : ""}</dl>
+    <div class="iss-sec">方針</div>
+    <div class="iss-plan" style="font-size:14px;color:inherit">${x.plan ? esc(x.plan) : `<span class="meta">まだ決まっていません</span>`}</div>
+    <div class="iss-sec">経過メモ <span class="meta" style="font-weight:400">新しい順</span></div>
+    <div style="background:#faf8f3;border-radius:8px;padding:8px 10px;margin-bottom:10px">${noteInput()}
+      <button class="btn sm pri" style="margin-top:6px" onclick="addIssueNote('${x.id}')">経過メモを追加</button></div>
+    ${ns.length ? ns.map(n => `<div class="iss-note" ${n.kind === "lawyer" ? `style="border-color:#e3b4ad"` : n.kind === "plan" ? `style="border-color:#ecd3a9"` : ""}>${kindTag(n)}<span class="meta">${n.date ? fmtDY(n.date) : "日付不明"}${n.by && OWNERS[OWNER_EMAIL[n.by]] ? "　" + esc(OWNERS[OWNER_EMAIL[n.by]]) : ""}</span>
+      <button class="btn sm" style="padding:0 6px;font-size:11px;float:right" onclick="delIssueNote('${x.id}','${n.nid}')">削除</button><div style="font-size:14px;margin-top:2px">${esc(n.text)}</div></div>`).join("") : `<div class="hint">まだありません</div>`}
+  </div>`;
 }
 function careRow({ m, x }) {
   return `<div class="row rowlink" style="align-items:flex-start" onclick="openRow('${m.id}','d-mtg')"><div class="grow"><b>${esc(m.name)}</b>${m.nick ? ` <span class="meta">（${esc(m.nick)}）</span>` : ""} <span class="tag t-store">ミーティングから</span>
@@ -1256,43 +1288,38 @@ function careRow({ m, x }) {
     <button class="btn sm" onclick="event.stopPropagation();toggleCare('${x.id}')">対応済み</button></div>`;
 }
 function renderIssues() {
-  const all = issuesArr(), open = all.filter(x => x.status !== "done"), cares = careItems(), me = myOwner();
-  const f = ui.issFilter || "open";
-  let list = f === "done" ? all.filter(x => x.status === "done").sort((a, b) => (b.doneAt || 0) - (a.doneAt || 0))
-    : f === "mine" ? open.filter(x => (x.owners || []).includes(me)).sort(issSort)
-    : f === "over" ? open.filter(x => x.due && daysFrom(x.due) < 0).sort(issSort)
-    : f === "all" ? [...open.sort(issSort), ...all.filter(x => x.status === "done")]
+  const all = issuesArr(), open = all.filter(x => x.status !== "done"), cares = careItems();
+  let f = ui.issFilter; if (!["open", "lawyer", "done"].includes(f)) f = ui.issFilter = "open";
+  const list = f === "done" ? all.filter(x => x.status === "done").sort((a, b) => (b.doneAt || 0) - (a.doneAt || 0))
     : f === "lawyer" ? all.filter(hasLawyer).sort((a, b) => (a.status === "done") - (b.status === "done") || issSort(a, b))
     : open.sort(issSort);
-  const showCare = f === "open" || f === "all";
-  const chip = (v, label) => `<button class="chip ${f === v ? "on" : ""}" onclick="ui.issFilter='${v}';renderIssues()">${label}</button>`;
-  const over = open.filter(x => x.due && daysFrom(x.due) < 0).length;
+  const wide = issWide();
+  if (wide && !list.some(x => x.id === ui.issSel)) ui.issSel = list[0]?.id || null; // 大きい画面では、最初の課題を開いておく
+  const selX = list.find(x => x.id === ui.issSel);
+  const chip = (v, label) => `<button class="chip ${f === v ? "on" : ""}" onclick="ui.issFilter='${v}';ui.issSel=null;renderIssues()">${label}</button>`;
+  const listHtml = `<div class="card" style="margin-bottom:14px">
+      ${f === "lawyer" ? `<div class="hint" style="margin-bottom:4px">弁護士相談の経過メモがある課題です（完了したものも含みます）</div>` : ""}
+      ${list.length ? list.map(x => issRow(x) + (!wide && x.id === ui.issSel ? `<div class="iss-inline">${issDetail(x)}</div>` : "")).join("") : `<div class="empty">${f === "done" ? "完了した課題はまだありません" : f === "lawyer" ? "弁護士相談の経過メモはまだありません" : "未完了の課題はありません"}</div>`}
+    </div>
+    ${f === "open" ? `<div class="card"><h3>ミーティングから（運営側でやること）<span class="cnt">${cares.length}</span></h3>${cares.length ? cares.map(careRow).join("") : `<div class="empty">未対応のものはありません</div>`}</div>` : ""}`;
   $("v-issues").innerHTML = pbar("運営課題", `<button class="btn pri" onclick="openIssue()">＋ 課題を追加</button>`) + `
-  <p class="hint" style="margin:0 0 12px">運営の3人で共有する課題です。会員とのミーティングで出た「運営側でやること」も、ここにまとめて表示されます。</p>
-  <div class="chips" style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:14px">${chip("open", `未完了（${open.length + cares.length}）`)}${chip("mine", `自分が担当（${open.filter(x => (x.owners || []).includes(me)).length}）`)}${chip("over", `期限切れ（${over}）`)}${chip("lawyer", `弁護士相談（${all.filter(hasLawyer).length}）`)}${chip("done", "完了したもの")}${chip("all", "すべて")}</div>
-  <div class="card">
-    ${f === "lawyer" ? `<div class="hint" style="margin-bottom:4px">弁護士相談の経過メモがある課題です（完了したものも含みます）。弁護士相談のメモだけを表示しています。</div>` : ""}
-    ${list.length ? list.map(x => issRow(x, false, f === "lawyer")).join("") : `<div class="empty">${f === "done" ? "完了した課題はまだありません" : f === "lawyer" ? "弁護士相談の経過メモはまだありません" : "該当する課題はありません"}</div>`}
-  </div>
-  ${showCare ? `<div class="card"><h3>ミーティングから（運営側でやること）<span class="cnt">${cares.length}</span></h3>${cares.length ? cares.map(careRow).join("") : `<div class="empty">未対応のものはありません</div>`}</div>` : ""}`;
+  <div class="chips" style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:14px">${chip("open", `未完了（${open.length + cares.length}）`)}${chip("lawyer", `弁護士相談（${all.filter(hasLawyer).length}）`)}${chip("done", "完了したもの")}</div>
+  ${wide ? `<div class="iss-grid"><div>${listHtml}</div><div class="card iss-side">${selX ? issDetail(selX) : `<div class="empty">左の一覧から課題を選ぶと、ここに中身が表示されます</div>`}</div></div>` : listHtml}`;
 }
-const noteInput = () => `<div style="display:flex;flex-wrap:wrap;gap:4px 14px;margin-top:8px">${Object.entries(NOTE_KIND).map(([k, v]) => `<label class="chk" style="color:inherit;font-size:14px;margin:0"><input type="radio" name="inKind" value="${k}" ${k === (ui.lastKind || "mtg") ? "checked" : ""}>${v}</label>`).join("")}</div>
-      <div class="f2" style="margin-top:6px;grid-template-columns:140px 1fr"><input id="inDate" type="date" value="${ui.lastNoteDate && Date.now() - ui.lastNoteAt < 3 * 3600000 ? ui.lastNoteDate : todayStr()}"><textarea id="inText" style="min-height:44px" placeholder="例：弁護士に相談、○○の方向で進めることに。検品は○○さんに依頼"></textarea></div>`;
+(() => { let w = issWide(); window.addEventListener("resize", () => { const n = issWide(); if (n !== w && ui.tab === "issues") renderIssues(); w = n; }); })();
+const noteInput = (p = "in") => `<div style="display:flex;flex-wrap:wrap;gap:4px 14px;margin-top:8px">${Object.entries(NOTE_KIND).map(([k, v]) => `<label class="chk" style="color:inherit;font-size:14px;margin:0"><input type="radio" name="${p}Kind" value="${k}" ${k === (ui.lastKind || "mtg") ? "checked" : ""}>${v}</label>`).join("")}</div>
+      <div class="f2 nin" style="margin-top:6px;grid-template-columns:140px 1fr"><input id="${p}Date" type="date" value="${ui.lastNoteDate && Date.now() - ui.lastNoteAt < 3 * 3600000 ? ui.lastNoteDate : todayStr()}"><textarea id="${p}Text" style="min-height:44px" placeholder="例：弁護士に相談、○○の方向で進めることに。検品は○○さんに依頼"></textarea></div>`;
 function openIssue(id) {
   const x = id ? state.issues[id] : { status: "todo", owners: [] };
   const mem = membersArr().filter(m => m.status !== "left" || m.id === x.memberId).sort(byNo);
-  const ns = id ? notesOf(x) : [];
-  modal(`<h3>${id ? "運営課題" : "運営課題を追加"}</h3>
+  modal(`<h3>${id ? "運営課題を編集" : "運営課題を追加"}</h3>
     <div class="f"><label>課題（必須）</label><input id="isTitle" value="${esc(x.title)}" placeholder="例：HAYATO未入金の精算をどう進めるか"></div>
     <div class="f"><label>方針（今の時点での進め方。書き換えると、変更前の方針は経過メモに自動で残ります）</label><textarea id="isPlan" style="min-height:70px" placeholder="決まっていなければ空欄で大丈夫です">${esc(x.plan)}</textarea></div>
     <div class="f"><label>担当（複数選べます）</label><div style="display:flex;flex-wrap:wrap;gap:4px 16px">${Object.entries(OWNERS).map(([k, v]) => `<label class="chk" style="color:inherit;font-size:14px;margin:0"><input type="checkbox" class="isOwner" value="${k}" ${(x.owners || []).includes(k) ? "checked" : ""}>${v}</label>`).join("")}</div></div>
     <div class="f2"><div class="f"><label>期限</label><input id="isDue" type="date" value="${esc(x.due)}"></div>
     <div class="f"><label>状態</label><select id="isSt">${Object.entries(ISS_ST).map(([k, v]) => `<option value="${k}" ${(x.status || "todo") === k ? "selected" : ""}>${v}</option>`).join("")}</select></div></div>
     <div class="f"><label>関連する会員（あれば）</label><select id="isMem"><option value="">—</option>${mem.map(m => `<option value="${m.id}" ${x.memberId === m.id ? "selected" : ""}>${esc((m.salonNo ? m.salonNo + " " : "") + m.name + (m.nick ? "（" + m.nick + "）" : ""))}</option>`).join("")}</select></div>
-    ${id ? `<div class="f"><label>経過メモ（日付付きで書き足していきます）</label>
-      ${ns.length ? ns.map(n => `<div class="iss-note" ${n.kind === "lawyer" ? `style="border-color:#e3b4ad"` : ""}>${kindTag(n)}<span class="meta">${n.date ? fmtDY(n.date) : "日付不明"}${n.by ? "　" + esc(OWNERS[OWNER_EMAIL[n.by]] || "") : ""}</span>　<button class="btn sm" style="padding:0 6px;font-size:11px" onclick="delIssueNote('${id}','${n.nid}')">削除</button><br>${esc(n.text)}</div>`).join("") : `<div class="hint">まだありません</div>`}
-      ${noteInput()}
-      <button class="btn sm" style="margin-top:6px" onclick="addIssueNote('${id}')">経過メモを追加</button></div>` : `<div class="f"><label>最初の経過メモ（あれば）</label>${noteInput()}</div>`}
+    ${id ? `<div class="hint">経過メモは、課題を開いた画面から書き足せます。</div>` : `<div class="f"><label>最初の経過メモ（あれば）</label>${noteInput("nn")}</div>`}
     <div class="mact">${id ? `<button class="btn danger" style="margin-right:auto" onclick="delIssue('${id}')">削除</button>` : ""}<button class="btn" onclick="closeModal()">キャンセル</button><button class="btn pri" onclick="saveIssue(${id ? `'${id}'` : ""})">保存</button></div>`);
 }
 function issueForm() {
@@ -1305,8 +1332,8 @@ async function saveIssue(id) {
   d.doneAt = d.status === "done" ? (old?.status === "done" ? old.doneAt || Date.now() : Date.now()) : null;
   d.updatedAt = Date.now();
   const nid = id || uid();
-  if (!id && $("inText").value.trim()) {
-    const k = document.querySelector("input[name=inKind]:checked")?.value || "other", n = { date: $("inDate").value, kind: k, text: $("inText").value.trim(), at: Date.now(), by: auth?.email || "demo" };
+  if (!id && $("nnText").value.trim()) {
+    const k = document.querySelector("input[name=nnKind]:checked")?.value || "other", n = { date: $("nnDate").value, kind: k, text: $("nnText").value.trim(), at: Date.now(), by: auth?.email || "demo" };
     d.notes = { [uid()]: n }; ui.lastKind = k; ui.lastNoteDate = n.date; ui.lastNoteAt = Date.now();
   }
   let planNote = null;
@@ -1315,6 +1342,7 @@ async function saveIssue(id) {
   }
   state.issues[nid] = { ...(old || { createdAt: Date.now(), by: auth?.email || "demo" }), ...d };
   if (planNote) state.issues[nid].notes = { ...(state.issues[nid].notes || {}), [planNote[0]]: planNote[1] };
+  if (!id) ui.issSel = nid;
   closeModal(); render(); toast("保存しました");
   await save(id ? "PATCH" : "PUT", `issues/${nid}`, id ? d : state.issues[nid]);
   if (planNote) await save("PUT", `issues/${nid}/notes/${planNote[0]}`, planNote[1]);
@@ -1327,25 +1355,20 @@ async function setIssueSt(id, st) {
 async function addIssueNote(id) {
   const text = $("inText").value.trim();
   if (!text) { alert("経過メモを入力してください"); return; }
-  const keep = issueForm(), nid = uid(), n = { date: $("inDate").value, kind: document.querySelector("input[name=inKind]:checked")?.value || "other", text, at: Date.now(), by: auth?.email || "demo" };
+  const nid = uid(), n = { date: $("inDate").value, kind: document.querySelector("input[name=inKind]:checked")?.value || "other", text, at: Date.now(), by: auth?.email || "demo" };
   ui.lastKind = n.kind; ui.lastNoteDate = n.date; ui.lastNoteAt = Date.now(); // 同じ相談のメモを続けて入れやすくする
   const x = state.issues[id]; x.notes = { ...(x.notes || {}), [nid]: n };
-  openIssue(id); restoreIssueForm(keep); toast("経過メモを追加しました");
+  render(); toast("経過メモを追加しました");
   await save("PUT", `issues/${id}/notes/${nid}`, n);
 }
 function delIssueNote(id, nid) {
-  const keep = issueForm();
   confirmBox("この経過メモを削除しますか？", async () => {
-    delete state.issues[id].notes[nid]; openIssue(id); restoreIssueForm(keep); toast("削除しました");
+    delete state.issues[id].notes[nid]; render(); toast("削除しました");
     await save("DELETE", `issues/${id}/notes/${nid}`);
   });
 }
-function restoreIssueForm(d) { // 経過メモを追加しても、上の欄の書きかけを消さない
-  $("isTitle").value = d.title; $("isPlan").value = d.plan; $("isDue").value = d.due; $("isSt").value = d.status; $("isMem").value = d.memberId;
-  document.querySelectorAll(".isOwner").forEach(e => e.checked = d.owners.includes(e.value));
-}
 function delIssue(id) {
-  confirmBox("この課題を削除しますか？経過メモも消えます。", async () => { delete state.issues[id]; closeModal(); render(); toast("削除しました"); await save("DELETE", `issues/${id}`); });
+  confirmBox("この課題を削除しますか？経過メモも消えます。", async () => { delete state.issues[id]; if (ui.issSel === id) ui.issSel = null; closeModal(); render(); toast("削除しました"); await save("DELETE", `issues/${id}`); });
 }
 
 /* ---------- モーダル ---------- */
