@@ -74,8 +74,10 @@ pre{white-space:pre-wrap;font-family:inherit;background:#faf9f5;border:1px solid
     <div id="prevCard" class="card hidden" style="border-color:var(--gold)">
       <h2>送信済みの回答</h2>
       <div id="prevList"></div>
-      <p class="sub" style="font-size:13px;margin:8px 0 0">追加や訂正がある場合は、下のフォームからもう一度送信してください。</p>
+      <p class="sub" style="font-size:13px;margin:8px 0 0">あとから未入金が見つかった場合は、下のフォームから<b>追加の分だけ</b>を送信してください（すでに送ったものは入力し直さなくて大丈夫です）。訂正がある場合は、補足に書いてください。</p>
     </div>
+    <div id="closedCard" class="card hidden" style="border-color:var(--red)"><h2>受付は終了しました</h2><p class="sub" style="margin:0">追加でお伝えしたいことがある場合は、運営まで直接ご連絡ください。</p></div>
+    <div id="mainArea">
     <div class="card">
       <h1><span id="who"></span>さん</h1>
       <p class="sub" style="margin:0">ハヤトさんの退任に伴い、MNPキャッシュバックや商品代金などで、まだ入金されていないものがないか確認しています。該当するものを選んで、内容を入力してください。</p>
@@ -83,7 +85,7 @@ pre{white-space:pre-wrap;font-family:inherit;background:#faf9f5;border:1px solid
     </div>
 
     <div class="card">
-      <h2>1. 未入金はありますか？</h2>
+      <h2 id="q1">1. 未入金はありますか？</h2>
       <div class="choice" id="choice">
         <label><input type="radio" name="ans" value="none"><span><b>該当なし</b><span class="sub">未入金のものはありません</span></span></label>
         <label><input type="radio" name="ans" value="has"><span><b>該当あり</b><span class="sub">未入金のものがあります（下で内容を入力）</span></span></label>
@@ -109,9 +111,11 @@ pre{white-space:pre-wrap;font-family:inherit;background:#faf9f5;border:1px solid
       <textarea id="memo" placeholder="分かっていることや、やり取りの状況など"></textarea>
     </div>
 
+    <div id="lateNote" class="card hidden" style="border-color:var(--gold);background:var(--gold-soft)"><p class="sub" style="margin:0;color:var(--ink)">回答の期限（<span id="dlText"></span>）を過ぎています。送信はできますが、期限後のお申し出については個別に対応を判断させていただきます。</p></div>
     <div class="err" id="err"></div>
     <button class="send" id="sendBtn" onclick="send()" disabled>送信する</button>
     <p class="sub" style="text-align:center;margin-top:8px">送信した内容は、GILD運営（HAK・KANETAKAの代表）だけが確認します。</p>
+    </div>
   </div>
 
   <div id="doneView" class="hidden">
@@ -128,14 +132,20 @@ pre{white-space:pre-wrap;font-family:inherit;background:#faf9f5;border:1px solid
 </main>
 <script>
 const DB = "https://gild-members-default-rtdb.asia-southeast1.firebasedatabase.app";
-const DEADLINE = "11/30（月）午前中";
+let DEADLINE = "11/30（月）午前中", cfg = {};
 const CARRIERS = ["docomo", "au", "SoftBank", "楽天モバイル", "ahamo", "povo", "LINEMO", "UQモバイル", "Y!mobile", "その他", "分からない"];
 const $ = id => document.getElementById(id);
 const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 let token = new URLSearchParams(location.search).get("t") || "";
 let label = "";
 
+function fmtDL(iso) { const d = new Date(iso); return `${d.getMonth() + 1}/${d.getDate()}（${"日月火水木金土"[d.getDay()]}）${d.getHours()}:${String(d.getMinutes()).padStart(2, "0")}`; }
+async function loadCfg() {
+  try { const r = await fetch(`${DB}/gild/formConfig.json`); cfg = (r.ok ? await r.json() : null) || {}; } catch (e) { cfg = {}; }
+  if (cfg.deadline) DEADLINE = fmtDL(cfg.deadline);
+}
 async function init() {
+  await loadCfg();
   $("deadline").textContent = `回答は ${DEADLINE} までにお願いします。期限までにご回答がない場合は、現時点で該当なしとして集計を進めます。`;
   if (!token) { $("loading").classList.add("hidden"); $("phoneView").classList.remove("hidden"); return; }
   if (!/^[a-z0-9]{16,40}$/.test(token)) return showBad();
@@ -147,6 +157,8 @@ async function init() {
     $("who").textContent = label || "会員";
     loadPrev();
     $("loading").classList.add("hidden"); $("formView").classList.remove("hidden");
+    if (cfg.closed) { $("closedCard").classList.remove("hidden"); $("mainArea").classList.add("hidden"); $("deadline").classList.add("hidden"); }
+    else if (cfg.deadline && Date.now() > new Date(cfg.deadline).getTime()) { $("dlText").textContent = DEADLINE; $("lateNote").classList.remove("hidden"); }
   } catch (e) { showBad(); }
 }
 let prevSubs = [];
@@ -161,6 +173,11 @@ async function loadPrev() {
     <pre style="margin:6px 0 0">${esc(x.summary)}</pre>
     <div class="bt"><button class="line" style="font-size:14px;padding:9px" onclick="sendLine(prevSubs[${i}].summary)">LINEで送る</button><button class="copy2" onclick="copySummary(prevSubs[${i}].summary,this)">コピー</button></div></div>`).join("");
   $("prevCard").classList.remove("hidden");
+  $("q1").textContent = "1. 追加でお伝えすることはありますか？";
+  const lbl = document.querySelectorAll("#choice label .sub");
+  lbl[0].textContent = "（確認中だった方）確認した結果、未入金はありませんでした";
+  lbl[1].textContent = "送信済みの分とは別に、未入金のものがあります（下で入力）";
+  lbl[2].textContent = "まだ確認しています";
 }
 const normPhone = p => String(p || "").replace(/[０-９]/g, c => String.fromCharCode(c.charCodeAt(0) - 0xFEE0)).replace(/\D/g, "");
 async function phoneHash(p) { const b = await crypto.subtle.digest("SHA-256", new TextEncoder().encode("gild:" + normPhone(p))); return Array.from(new Uint8Array(b), x => x.toString(16).padStart(2, "0")).join(""); }
