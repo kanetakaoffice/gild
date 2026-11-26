@@ -316,7 +316,7 @@ const LEAVE_CHECKS = { date: "退会日を確定した", pay: "月額などの�
 const leaveDone = m => Object.keys(LEAVE_CHECKS).filter(k => m.leaveChecks?.[k]).length;
 const stTag = st => st && st !== "active" ? ` <span class="tag ${st === "leaving" ? "t-orange" : "t-gray"}">${STATUS[st]}</span>` : "";
 
-let state = { members: {}, meetings: {}, payments: {}, arrears: {}, logs: {}, formTokens: {}, formSubs: {}, formLookup: {} };
+let state = { members: {}, meetings: {}, payments: {}, arrears: {}, logs: {}, formTokens: {}, formSubs: {}, formLookup: {}, formConfig: {} };
 const CHECK = { unchecked: "未確認", has: "未入金あり", none: "未入金なし" };
 const ARR_ST = { unpaid: "未入金", settled: "精算済み" };
 const EVID = { line: "LINE", mail: "メール", apply: "買取依頼書・買取申請", form: "回答フォーム", slip: "納品書・発送伝票", bank: "振込・取引明細", photo: "写真・スクショ", other: "その他" };
@@ -463,7 +463,7 @@ async function save(method, path, body) {
 async function loadAll() {
   if (DEMO) return;
   const d = await db("GET", "") || {};
-  state.members = d.members || {}; state.meetings = d.meetings || {}; state.payments = d.payments || {}; state.arrears = d.arrears || {}; state.logs = d.logs || {}; state.formTokens = d.formTokens || {}; state.formSubs = d.formSubs || {};
+  state.members = d.members || {}; state.meetings = d.meetings || {}; state.payments = d.payments || {}; state.arrears = d.arrears || {}; state.logs = d.logs || {}; state.formTokens = d.formTokens || {}; state.formSubs = d.formSubs || {}; state.formConfig = d.formConfig || {};
 }
 
 /* ---------- 計算 ---------- */
@@ -580,6 +580,7 @@ function renderHome() {
     ${stat(`${Number(k.slice(5))}月の月額 未払い`, unpaid.length, "人", "支払い画面へ →", "go('pay')", unpaid.length ? "red" : "")}
     ${stat("GAIN未入金", arrTotal.toLocaleString(), "円", `${arrOpen.length}件${arrOpen.filter(amtUnknown).length ? `・金額未確定 ${arrOpen.filter(amtUnknown).length}件` : ""}`, "go('arrears')", arrTotal ? "red" : "")}
   </div>
+  ${pendingSubs() ? `<div class="card rowlink" style="border-color:#ecd3a9;background:#fdf8ef;margin:0 0 16px;padding:14px 16px" onclick="go('arrears')"><b>GAIN未入金の回答フォームに、未処理の回答が ${pendingSubs()}件 あります</b><span class="meta">　押すとGAIN未入金の画面を開きます →</span></div>` : ""}
   <div class="hgrid">
     <div>
       <div class="card" id="hSched"><h3>今日・今週のミーティング<span class="cnt">${week.length}</span></h3>
@@ -808,6 +809,7 @@ function renderArrears() {
   const f = ui.arrFilter || "unpaid";
   if (f === "settled") list = list.filter(r => r.l.length && r.open === 0);
   if (f === "unchecked") list = list.filter(r => !r.m.gainCheck || r.m.gainCheck === "unchecked");
+  if (f === "checking") list = list.filter(r => lastAnswer(r.m.id) === "checking");
   if (f === "unpaid") list = list.filter(r => r.open > 0);
   if (f === "fill") list = list.filter(r => r.l.some(needFill)).map(r => ({ ...r, l: r.l.filter(needFill) }));
   if (f === "needev") list = list.filter(r => r.l.some(needEv)).map(r => ({ ...r, l: r.l.filter(needEv) }));
@@ -827,7 +829,7 @@ function renderArrears() {
     <div class="card stat"><div class="hint">会員への聞き取り</div><div class="num">${checked}<small> / ${mem.length}人 確認済み</small></div></div>
   </div>
   <div class="toolbar noprint">
-    <div class="chips">${chip("unpaid", "未入金が残っている会員")}${chip("settled", "精算が終わった会員")}${chip("fill", "あとで埋める取引（日付不明・金額未確定）")}${chip("unchecked", "まだ聞き取りしていない会員")}${chip("needev", "証拠を集める必要がある")}${chip("noev", "証拠が存在しない")}</div>
+    <div class="chips">${chip("unpaid", "未入金が残っている会員")}${chip("settled", "精算が終わった会員")}${chip("fill", "あとで埋める取引（日付不明・金額未確定）")}${chip("unchecked", "まだ聞き取りしていない会員")}${chip("needev", "証拠を集める必要がある")}${chip("noev", "証拠が存在しない")}${chip("checking", "確認中のまま")}</div>
     <div style="margin-left:auto;display:flex;gap:6px"><button class="btn sm" onclick="arrAll(true)">すべて開く</button><button class="btn sm" onclick="arrAll(false)">すべて閉じる</button></div>
   </div>
   ${list.length ? list.map(r => `
@@ -1043,6 +1045,10 @@ async function openFormLinks() {
       <button class="btn sm gold" onclick="copyText($('flMsgC').value.replace('{URL}','${common}'),this)">共通URLの文章をコピー</button> <button class="btn sm" onclick="copyText('${common}',this)">URLだけ</button>
       ${noPhone.length ? `<div class="err" style="margin-top:8px">電話番号が登録されていない会員（${noPhone.length}人）は共通URLを使えません。下の個別URLを送るか、会員ページで電話番号を登録してから開き直してください：${noPhone.map(m => esc(((m.salonNo || "") + " " + m.name).trim())).join("、")}</div>` : `<div class="meta" style="margin-top:8px">全員の電話番号が登録されています。</div>`}
     </div>
+    <div class="card" style="margin-bottom:14px"><b>受付の設定</b>
+      <div class="f2" style="margin-top:8px"><div class="f"><label>回答の期限（過ぎても送れますが「期限後」の印が付きます）</label><input type="datetime-local" id="fcDeadline" value="${toLocalInput(state.formConfig?.deadline || "2026-11-30T12:00:00+09:00")}"></div>
+      <div class="f"><label>&nbsp;</label><label class="chk" style="color:inherit;font-size:14px;margin:0"><input type="checkbox" id="fcClosed" ${state.formConfig?.closed ? "checked" : ""}>受付を終了する（フォームから送れなくなります）</label></div></div>
+      <button class="btn sm pri" onclick="saveFormCfg()">設定を保存</button>${state.formConfig?.deadline ? "" : ` <span class="meta">※まだ保存されていません。保存するとフォームに期限が表示されます</span>`}</div>
     <b>個別のURL（会員ごとに別のURLです）</b>
     <p class="hint">「文章をコピー」を押すと、その会員専用のURLが入った文章がコピーされます。それぞれの会員の個別LINEに貼り付けて送ってください。<b>URLを他の会員に送らないよう注意してください</b>（その人として回答できてしまいます）。</p>
     <div class="f"><label>送る文章（{URL} の部分に、その会員のURLが入ります）</label><textarea id="flMsg" style="min-height:170px" oninput="try{localStorage.setItem('gildFormMsg',this.value)}catch(e){}">${esc(msg || FORM_MSG_DEFAULT)}</textarea></div>
@@ -1061,6 +1067,16 @@ async function copyText(t, btn) {
 }
 function copyFormMsg(id, btn) { const url = FORM_URL() + state.members[id].formToken; copyText($("flMsg").value.replace("{URL}", url), btn); }
 function copyFormUrl(id, btn) { copyText(FORM_URL() + state.members[id].formToken, btn); }
+const isLate = x => state.formConfig?.deadline && x.at > new Date(state.formConfig.deadline).getTime();
+const pendingSubs = () => { let n = 0; Object.values(state.formSubs || {}).forEach(o => Object.values(o || {}).forEach(x => { if (!x.processed) n++; })); return n; };
+const lastAnswer = id => { const sb = subsOf(id); return sb.length ? sb[sb.length - 1].answer : ""; };
+async function saveFormCfg() {
+  const dl = $("fcDeadline").value, closed = $("fcClosed").checked;
+  state.formConfig = { deadline: dl ? new Date(dl).toISOString() : "", closed };
+  toast(closed ? "受付を終了しました" : "設定を保存しました"); render();
+  await save("PUT", "formConfig", state.formConfig);
+}
+const toLocalInput = iso => { if (!iso) return ""; const d = new Date(iso); return new Date(d.getTime() - d.getTimezoneOffset() * 60000).toISOString().slice(0, 16); };
 function renderFormSubs() {
   const subs = [];
   Object.entries(state.formSubs || {}).forEach(([t, o]) => { const mid = state.formTokens[t]?.memberId; Object.entries(o || {}).forEach(([sid, x]) => { if (!x.processed) subs.push({ t, sid, mid, ...x }); }); });
@@ -1069,7 +1085,7 @@ function renderFormSubs() {
   return `<div class="card" style="border-color:#ecd3a9"><h3>フォームの回答（未処理）<span class="cnt">${subs.length}</span><span class="meta" style="font-weight:400;margin-left:8px">内容を確認して「取り込む」を押すと、GAIN未入金に反映されます</span></h3>
     ${subs.map(x => { const m = state.members[x.mid] || {};
       return `<div class="row" style="align-items:flex-start"><div class="grow"><b>${esc(m.salonNo || "")} ${esc(m.name || "不明")}</b>${m.nick ? ` <span class="meta">（${esc(m.nick)}）</span>` : ""}
-        <span class="tag ${x.answer === "has" ? "t-red" : x.answer === "none" ? "t-green" : "t-orange"}">${ANS[x.answer] || ""}</span> <span class="meta">${new Date(x.at).toLocaleString("ja-JP")}</span>
+        <span class="tag ${x.answer === "has" ? "t-red" : x.answer === "none" ? "t-green" : "t-orange"}">${ANS[x.answer] || ""}</span>${isLate(x) ? ` <span class="tag t-gray">期限後</span>` : ""}${subsOf(x.mid).length > 1 ? ` <span class="tag t-gray">${subsOf(x.mid).length}回目の回答</span>` : ""} <span class="meta">${new Date(x.at).toLocaleString("ja-JP")}</span>
         <pre style="white-space:pre-wrap;font-family:inherit;font-size:13px;background:#faf9f5;border-radius:6px;padding:8px 10px;margin:6px 0 0">${esc(x.summary || "")}</pre></div>
         <div style="display:flex;flex-direction:column;gap:6px"><button class="btn sm gold" onclick="importSub('${x.t}','${x.sid}')">取り込む</button><button class="btn sm" onclick="dismissSub('${x.t}','${x.sid}')">取り込まずに処理済み</button></div></div>`; }).join("")}
   </div>`;
