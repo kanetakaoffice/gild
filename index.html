@@ -333,7 +333,7 @@ const leaveDone = m => Object.keys(LEAVE_CHECKS).filter(k => m.leaveChecks?.[k])
 const stTag = st => st && st !== "active" ? ` <span class="tag ${st === "leaving" ? "t-orange" : "t-gray"}">${STATUS[st]}</span>` : "";
 
 let state = { members: {}, meetings: {}, payments: {}, arrears: {}, logs: {}, formTokens: {}, formSubs: {}, formLookup: {}, formConfig: {}, issues: {} };
-const CHECK = { unchecked: "未確認", has: "未入金あり", none: "未入金なし" };
+const CHECK = { unchecked: "未確認", has: "未入金あり", none: "未入金なし", exempt: "対象外" }; // 対象外：運営・スタッフ・HAYATOなど、聞き取りが必要ない人
 const ARR_ST = { unpaid: "未入金", settled: "精算済み" };
 const EVID = { line: "LINE", mail: "メール", apply: "買取依頼書・買取申請", form: "回答フォーム", slip: "納品書・発送伝票", bank: "振込・取引明細", photo: "写真・スクショ", other: "その他" };
 const EV_ST = { pending: "まだ集めていない", requested: "会員に提出を依頼中", none: "存在しない（口頭のみ等）" };
@@ -821,7 +821,8 @@ function renderArrears() {
   const all = Object.entries(state.arrears).map(([id, x]) => ({ id, ...x }));
   const mem = membersArr();
   const total = arrSum(all, "unpaid"), settled = arrSum(all, "settled");
-  const checked = mem.filter(m => m.gainCheck && m.gainCheck !== "unchecked").length;
+  const target = mem.filter(m => m.gainCheck !== "exempt"), exempt = mem.length - target.length;
+  const checked = target.filter(m => m.gainCheck && m.gainCheck !== "unchecked").length;
   let list = mem.map(m => { const l = arrOf(m.id); return { m, l, unpaid: arrSum(l, "unpaid"), settled: arrSum(l, "settled"), open: l.filter(isOpen).length, qty: openQty(l), unk: l.filter(x => isOpen(x) && amtUnknown(x)).length }; });
   const f = ui.arrFilter || "unpaid";
   if (f === "settled") list = list.filter(r => r.l.length && r.open === 0);
@@ -843,7 +844,7 @@ function renderArrears() {
   <div class="grid3">
     <div class="card stat"><div class="hint">未入金 合計</div><div class="num red">${total.toLocaleString()}<small>円</small></div><div class="meta">${openCnt}件・${qtyAll}個</div>${unkCnt ? `<div class="meta" style="color:#a8661c">ほかに金額未確定 ${unkCnt}件</div>` : ""}${dateCnt ? `<div class="meta" style="color:#a8661c">日付不明 ${dateCnt}件</div>` : ""}${needAmt ? `<div class="meta">うち証拠を集める必要あり ${needAmt.toLocaleString()}円</div>` : ""}${noAmt ? `<div class="meta">うち証拠が存在しない ${noAmt.toLocaleString()}円</div>` : ""}</div>
     <div class="card stat"><div class="hint">精算済み 合計</div><div class="num">${settled.toLocaleString()}<small>円</small></div></div>
-    <div class="card stat"><div class="hint">会員への聞き取り</div><div class="num">${checked}<small> / ${mem.length}人 確認済み</small></div></div>
+    <div class="card stat"><div class="hint">会員への聞き取り</div><div class="num">${checked}<small> / ${target.length}人 確認済み</small></div>${exempt ? `<div class="meta">ほかに対象外 ${exempt}人（聞き取り不要）</div>` : ""}</div>
   </div>
   <div class="toolbar noprint">
     <div class="chips">${chip("unpaid", "未入金が残っている会員")}${chip("settled", "精算が終わった会員")}${chip("fill", "あとで埋める取引（日付不明・金額未確定）")}${chip("unchecked", "まだ聞き取りしていない会員")}${chip("needev", "証拠を集める必要がある")}${chip("noev", "証拠が存在しない")}${chip("checking", "確認中のまま")}</div>
