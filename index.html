@@ -741,7 +741,7 @@ function renderDetail() {
   ${(() => { const al = arrOf(id); return `<div class="card">
     <div class="dhead"><h3 style="margin:0">GAIN未入金 <span class="tag ${m.gainCheck === "has" ? "t-red" : m.gainCheck === "none" ? "t-green" : "t-gray"}">聞き取り：${CHECK[m.gainCheck || "unchecked"]}</span></h3>
       <div style="margin-left:auto;display:flex;gap:6px;flex-wrap:wrap">${Object.entries(CHECK).map(([k, v]) => `<button class="btn sm ${(m.gainCheck || "unchecked") === k ? "pri" : ""}" onclick="setCheck('${id}','${k}')">${v}</button>`).join("")}<button class="btn sm gold" onclick="openArrear('${id}')">＋ 追加</button></div></div>
-    ${subsOf(id).length ? `<div class="meta" style="margin-top:6px">フォームの回答：${subsOf(id).map(x => `${new Date(x.at).toLocaleDateString("ja-JP")} ${ANS[x.answer] || ""}${x.processed ? "（処理済み）" : "（未処理）"}`).join("　/　")}</div>` : ""}
+    ${subsOf(id).length ? `<div class="meta" style="margin-top:6px">フォームの回答：${subsOf(id).map(x => `${new Date(x.at).toLocaleDateString("ja-JP")} ${ANS[x.answer] || ""}${procLabel(x)}`).join("　/　")}</div>` : ""}
     ${al.length ? `<div style="margin:8px 0 4px">未入金 <b class="red">${arrSum(al, "unpaid").toLocaleString()}円</b>${arrSum(al, "settled") ? `　<span class="meta">精算済み ${arrSum(al, "settled").toLocaleString()}円</span>` : ""}</div>${arrTable(al, id)}` : `<div class="empty">記録はありません</div>`}
   </div>`; })()}
   ${(() => { const lg = logsOf(id), w = warnCount(id); return `<div class="card">
@@ -1112,16 +1112,18 @@ function renderFormSubs() {
       ${none.map(x => `<div class="row" style="padding:6px 0"><div class="grow">${head(x)}</div><div style="display:flex;gap:6px">${btns(x)}</div></div>`).join("")}` : ""}
   </div>`;
 }
+const procInfo = how => ({ processed: true, processedAt: Date.now(), processedBy: auth?.email || "demo", processedHow: how }); // 誰が・いつ・どう処理したかを残す
+const procLabel = x => { if (!x.processed) return "（未処理）"; const who = OWNERS[OWNER_EMAIL[x.processedBy]] || ""; return `（${x.processedHow === "dismiss" ? "取り込まずに処理済み" : x.processedHow === "import" ? "取り込み済み" : "処理済み"}${who ? "・" + who : ""}${x.processedAt ? "・" + new Date(x.processedAt).toLocaleString("ja-JP", { month: "numeric", day: "numeric", hour: "2-digit", minute: "2-digit" }) : ""}）`; };
 function importNoneAll() {
   const list = [];
   Object.entries(state.formSubs || {}).forEach(([t, o]) => Object.entries(o || {}).forEach(([sid, x]) => { if (!x.processed && x.answer === "none" && state.members[state.formTokens[t]?.memberId]) list.push({ t, sid, mid: state.formTokens[t].memberId }); }));
   if (!list.length) return;
   confirmBox(`該当なしの回答 ${list.length}件をまとめて取り込みます。それぞれの会員の聞き取りを「${CHECK.none}」にします。\n（テストの回答などが混ざっていたら、先に「取り込まずに処理済み」にしてください）`, async () => {
-    list.forEach(({ t, sid, mid }) => { state.formSubs[t][sid].processed = true; state.members[mid].gainCheck = "none"; });
+    list.forEach(({ t, sid, mid }) => { Object.assign(state.formSubs[t][sid], procInfo("import")); state.members[mid].gainCheck = "none"; });
     render(); toast(`${list.length}件を取り込みました`);
     for (const { t, sid, mid } of list) {
       await save("PATCH", `members/${mid}`, { gainCheck: "none" });
-      await save("PATCH", `formSubs/${t}/${sid}`, { processed: true, processedAt: Date.now() });
+      await save("PATCH", `formSubs/${t}/${sid}`, procInfo("import"));
     }
   });
 }
@@ -1160,16 +1162,16 @@ function confirmImport() {
 }
 async function doImportSub(t, sid, mid, add, check) {
   const m = state.members[mid], x = state.formSubs[t][sid];
-  Object.assign(state.arrears, add); m.gainCheck = check; x.processed = true;
+  Object.assign(state.arrears, add); m.gainCheck = check; Object.assign(x, procInfo("import"));
   render(); toast(Object.keys(add).length ? `${Object.keys(add).length}件を取り込みました` : "取り込みました");
   if (Object.keys(add).length) await save("PATCH", "arrears", add);
   await save("PATCH", `members/${mid}`, { gainCheck: check });
-  await save("PATCH", `formSubs/${t}/${sid}`, { processed: true, processedAt: Date.now() });
+  await save("PATCH", `formSubs/${t}/${sid}`, procInfo("import"));
 }
 function dismissSub(t, sid) {
   confirmBox("この回答を取り込まずに処理済みにしますか？（回答の内容は残ります）", async () => {
-    state.formSubs[t][sid].processed = true; render(); toast("処理済みにしました");
-    await save("PATCH", `formSubs/${t}/${sid}`, { processed: true, processedAt: Date.now() });
+    const pi = procInfo("dismiss"); Object.assign(state.formSubs[t][sid], pi); render(); toast("処理済みにしました");
+    await save("PATCH", `formSubs/${t}/${sid}`, pi);
   });
 }
 
