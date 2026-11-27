@@ -87,7 +87,11 @@ h3{font-size:15px;margin:0 0 8px}
 .iss-side{position:sticky;top:96px;max-height:calc(100vh - 116px);overflow:auto;margin:0}
 .iss-row.sel{background:var(--gold-soft)}
 .iss-row .chev2{color:#b9ad97;font-size:11px;align-self:center}
-.iss-inline .iss-dtitle{visibility:hidden}
+.iss-inline .iss-dtitle{visibility:hidden;height:0;overflow:hidden}
+.ck-row{display:flex;align-items:flex-start;gap:8px;padding:6px 0;border-bottom:1px dashed var(--line);font-size:14px}
+.ck-row .ck-text{flex:1;white-space:pre-wrap}
+.ck-st{border:0;cursor:pointer;flex-shrink:0;margin-top:1px}
+.ck-done .ck-text{color:#999;text-decoration:line-through}
 @media (max-width:560px){.nin{grid-template-columns:1fr!important}}
 .iss-inline{border:1px solid var(--line);border-radius:10px;padding:14px;margin:4px 0 10px;background:#fff}
 .iss-dl{display:grid;grid-template-columns:auto 1fr;gap:4px 14px;margin:0 0 6px;font-size:14px}.iss-dl dt{color:#888;font-size:13px}.iss-dl dd{margin:0}
@@ -96,6 +100,12 @@ h3{font-size:15px;margin:0 0 8px}
 .sub-card{border:1px solid var(--line);border-radius:10px;padding:12px 14px;background:#fff}
 @media (max-width:560px){.sub-grid{grid-template-columns:1fr}}
 .subd{margin:4px 0;font-size:13px}.subd summary{cursor:pointer;padding:4px 0}
+.supbox{background:#fdf8ef;border:1px solid #ecd3a9;border-radius:8px;padding:8px 12px;margin:0 0 8px;font-size:13px;white-space:pre-wrap}.supbox b{display:block;font-size:12px;color:#8a6d3b;margin-bottom:2px}
+.tbl td.itemcol{white-space:normal;min-width:240px;max-width:420px}
+@media (min-width:1300px){.tbl.arrtbl{width:auto;min-width:760px}.arrwrap{display:flex;flex-direction:row-reverse;gap:14px;align-items:flex-start;justify-content:flex-end}.arrwrap .supbox{flex:1;margin:0}}
+.notecol{font-size:12px;color:#888;max-width:340px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;cursor:pointer;margin-top:1px}
+.notecol.open{white-space:normal;overflow:visible}
+@media print{.notecol{white-space:normal;max-width:none}}
 .iss-plan{font-size:13px;white-space:pre-wrap;margin-top:3px;color:#444}
 .chip.on{background:var(--dark);color:#fff;border-color:var(--dark)}
 
@@ -806,19 +816,21 @@ const isOpen = x => (x.status || "unpaid") === "unpaid";
 const needFill = x => isOpen(x) && (!x.date || amtUnknown(x));
 const openQty = l => l.filter(isOpen).reduce((s, x) => s + (Number(x.qty) || 0), 0);
 const arrSum = (list, st) => list.filter(x => !st || (x.status || "unpaid") === st).reduce((s, x) => s + arrAmt(x), 0);
+const splitNote = n => { const i = (n || "").indexOf("／補足："); return i < 0 ? [n || "", ""] : [n.slice(0, i), n.slice(i + 4)]; }; // 取引ごとのメモ と フォームの補足 に分ける
 function arrTable(list, memberId) {
   if (!list.length) return `<div class="empty">記録はありません</div>`;
-  return `<div class="scroll"><table class="tbl">
-    <tr><th>取引日</th><th>商品</th><th style="text-align:right">個数</th><th style="text-align:right">単価</th><th style="text-align:right">金額</th><th>状態</th><th>証拠</th><th class="hide-sp">メモ</th><th class="noprint"></th></tr>
+  const sups = [...new Set(list.map(x => splitNote(x.note)[1]).filter(Boolean))];
+  const hasUnit = list.some(x => x.unitPrice != null); // 単価が1件も入っていなければ、単価の列は出さない
+  return `<div class="arrwrap">${sups.length ? `<div class="supbox"><b>フォームの補足</b>${sups.map(t => `<div>${esc(t)}</div>`).join("")}</div>` : ""}<div class="scroll"><table class="tbl arrtbl">
+    <tr><th>取引日</th><th>商品・メモ</th><th style="text-align:right">個数</th>${hasUnit ? `<th style="text-align:right">単価</th>` : ""}<th style="text-align:right">金額</th><th>状態</th><th>証拠</th><th class="noprint"></th></tr>
     ${list.map(x => `<tr class="${x.status === "settled" ? "left" : ""}">
-      <td>${x.date ? fmtDY(x.date) : `<span class="tag t-orange">日付不明</span>`}</td><td style="white-space:normal">${esc(x.item)}</td>
-      <td style="text-align:right">${x.qty ?? ""}</td><td style="text-align:right">${x.unitPrice != null ? Number(x.unitPrice).toLocaleString() : ""}</td>
+      <td>${x.date ? fmtDY(x.date) : `<span class="tag t-orange">日付不明</span>`}</td><td class="itemcol"><div>${esc(x.item)}</div>${splitNote(x.note)[0] ? `<div class="notecol" title="押すと全文を表示" onclick="this.classList.toggle('open')">${esc(splitNote(x.note)[0])}</div>` : ""}</td>
+      <td style="text-align:right">${x.qty ?? ""}</td>${hasUnit ? `<td style="text-align:right">${x.unitPrice != null ? Number(x.unitPrice).toLocaleString() : ""}</td>` : ""}
       <td style="text-align:right">${amtUnknown(x) ? `<span class="tag t-orange">金額未確定</span>` : `<b>${arrAmt(x).toLocaleString()}</b>`}</td>
       <td>${x.status === "settled" ? `<span class="tag t-green">精算済み</span><div class="meta">${fmtD(x.settledDate)}${x.settledBy ? " " + esc(x.settledBy) : ""}</div>` : `<span class="tag t-red">未入金</span>`}</td>
       <td style="white-space:normal">${evCell(x)}</td>
-      <td class="hide-sp" style="white-space:normal;font-size:12px">${esc(x.note)}</td>
       <td class="noprint"><button class="btn sm" onclick="openArrear('${memberId || x.memberId}','${x.id}')">編集</button></td></tr>`).join("")}
-  </table></div>`;
+  </table></div></div>`;
 }
 function renderArrears() {
   const all = Object.entries(state.arrears).map(([id, x]) => ({ id, ...x }));
@@ -1296,11 +1308,14 @@ function dueTag(x) {
 }
 const stTagI = x => `<span class="tag ${x.status === "done" ? "t-green" : x.status === "doing" ? "t-orange" : "t-gray"}">${ISS_ST[x.status || "todo"]}</span>`;
 const careItems = () => { const out = []; membersArr().filter(m => m.status !== "left").forEach(m => openCare(m.id).forEach(x => out.push({ m, x }))); return out.sort((a, b) => (b.x.date || "").localeCompare(a.x.date || "") || byNo(a.m, b.m)); };
+const CK_ST = { todo: "未伝達", told: "伝えた", done: "対応済み" };
+const checksOf = x => Object.entries(x.checks || {}).map(([cid, c]) => ({ cid, ...c })).sort((a, b) => (a.at || 0) - (b.at || 0));
+const ckSummary = x => { const c = checksOf(x); if (!c.length) return ""; const t = c.filter(i => (i.st || "todo") === "todo").length; return `<span class="tag ${t ? "t-orange" : "t-green"}">チェックリスト ${c.length}件${t ? `（未伝達 ${t}）` : "（すべて伝えた）"}</span>`; };
 const issWide = () => window.matchMedia("(min-width:1100px)").matches;
 function issRow(x) { // 一覧の1行（課題名・状態・期限・担当だけ）
   const ns = notesOf(x), last = ns[ns.length - 1], sel = ui.tab === "issues" && ui.issSel === x.id;
   return `<div class="row rowlink iss-row ${sel ? "sel" : ""}" onclick="selIssue('${x.id}')"><div class="grow">
-    <div><b>${esc(x.title)}</b> ${stTagI(x)} ${dueTag(x)}</div>
+    <div><b>${esc(x.title)}</b> ${stTagI(x)} ${dueTag(x)} ${ckSummary(x)}</div>
     <div class="meta">担当：${x.owners?.length ? esc(ownerNames(x)) : "未定"}${last ? `　最新の経過：${last.date ? fmtD(last.date) : "日付不明"} ${kindTag(last)}` : ""}</div>
   </div>${ui.tab === "issues" ? `<span class="chev2">${sel && !issWide() ? "▲" : "▶"}</span>` : ""}</div>`;
 }
@@ -1322,6 +1337,14 @@ function issDetail(x) { // 開いた中身（方針の全文と経過メモ）
       ${m ? `<dt>関連する会員</dt><dd><a href="javascript:void 0" onclick="openRow('${x.memberId}')">${esc(m.name)}${m.nick ? "（" + esc(m.nick) + "）" : ""}</a></dd>` : ""}</dl>
     <div class="iss-sec">方針</div>
     <div class="iss-plan" style="font-size:14px;color:inherit">${x.plan ? esc(x.plan) : `<span class="meta">まだ決まっていません</span>`}</div>
+    <div class="iss-sec" style="display:flex;align-items:center;gap:8px">チェックリスト <span class="meta" style="font-weight:400">要望や伝えることを、思いついたときに追加</span>
+      ${checksOf(x).some(c => (c.st || "todo") === "todo") ? `<button class="btn sm" style="margin-left:auto" onclick="copyChecks('${x.id}')">未伝達をコピー</button>` : ""}</div>
+    ${checksOf(x).map(c => { const st = c.st || "todo"; return `<div class="ck-row ${st === "done" ? "ck-done" : ""}">
+      <button class="tag ${st === "todo" ? "t-orange" : st === "told" ? "t-store" : "t-green"} ck-st" title="押すと状態が変わります" onclick="cycleCheck('${x.id}','${c.cid}')">${CK_ST[st]}</button>
+      <span class="ck-text">${esc(c.text)}<span class="meta">${c.by && OWNERS[OWNER_EMAIL[c.by]] ? "　" + esc(OWNERS[OWNER_EMAIL[c.by]]) : ""}${c.at ? "　" + new Date(c.at).toLocaleDateString("ja-JP", { month: "numeric", day: "numeric" }) : ""}</span></span>
+      <button class="btn sm" style="padding:0 6px;font-size:11px" onclick="delCheck('${x.id}','${c.cid}')">削除</button></div>`; }).join("")}
+    <div style="display:flex;gap:6px;margin:6px 0 4px"><textarea id="ckText" style="min-height:38px;flex:1" placeholder="例：一括査定（型番で絞り込んだら、まとめて同じ査定金額に）。複数行で入れると1行ずつ追加されます"></textarea><button class="btn sm pri" style="align-self:flex-start" onclick="addCheck('${x.id}')">追加</button></div>
+    <div class="hint" style="margin:0">状態のボタンを押すと「未伝達 → 伝えた → 対応済み」と切り替わります。</div>
     <div class="iss-sec">経過メモ <span class="meta" style="font-weight:400">新しい順</span></div>
     <div style="background:#faf8f3;border-radius:8px;padding:8px 10px;margin-bottom:10px">${noteInput()}
       <button class="btn sm pri" style="margin-top:6px" onclick="addIssueNote('${x.id}')">経過メモを追加</button></div>
@@ -1398,6 +1421,26 @@ async function setIssueSt(id, st) {
   const x = state.issues[id]; x.status = st; x.doneAt = st === "done" ? Date.now() : null;
   render(); toast(st === "done" ? "完了にしました" : "未完了に戻しました");
   await save("PATCH", `issues/${id}`, { status: st, doneAt: x.doneAt });
+}
+async function addCheck(id) {
+  const lines = $("ckText").value.split("\n").map(t => t.replace(/^[\s・\-•*]+/, "").trim()).filter(Boolean);
+  if (!lines.length) { alert("内容を入力してください"); return; }
+  const x = state.issues[id], add = {}, now = Date.now();
+  lines.forEach((text, i) => { add[uid()] = { text, st: "todo", at: now + i, by: auth?.email || "demo" }; });
+  x.checks = { ...(x.checks || {}), ...add }; render(); toast(`${lines.length}件追加しました`);
+  await save("PATCH", `issues/${id}/checks`, add);
+}
+async function cycleCheck(id, cid) {
+  const c = state.issues[id].checks[cid], nx = { todo: "told", told: "done", done: "todo" }[c.st || "todo"];
+  c.st = nx; c.stAt = Date.now(); render();
+  await save("PATCH", `issues/${id}/checks/${cid}`, { st: nx, stAt: c.stAt });
+}
+function delCheck(id, cid) {
+  confirmBox("この項目を削除しますか？", async () => { delete state.issues[id].checks[cid]; render(); toast("削除しました"); await save("DELETE", `issues/${id}/checks/${cid}`); });
+}
+function copyChecks(id) {
+  const x = state.issues[id], t = checksOf(x).filter(c => (c.st || "todo") === "todo").map(c => "・" + c.text).join("\n");
+  copyText(`【${x.title}】\n${t}`);
 }
 async function addIssueNote(id) {
   const text = $("inText").value.trim();
