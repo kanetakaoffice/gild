@@ -95,6 +95,7 @@ h3{font-size:15px;margin:0 0 8px}
 .sub-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(420px,1fr));gap:12px;margin-bottom:6px}
 .sub-card{border:1px solid var(--line);border-radius:10px;padding:12px 14px;background:#fff}
 @media (max-width:560px){.sub-grid{grid-template-columns:1fr}}
+.subd{margin:4px 0;font-size:13px}.subd summary{cursor:pointer;padding:4px 0}
 .iss-plan{font-size:13px;white-space:pre-wrap;margin-top:3px;color:#444}
 .chip.on{background:var(--dark);color:#fff;border-color:var(--dark)}
 
@@ -741,7 +742,9 @@ function renderDetail() {
   ${(() => { const al = arrOf(id); return `<div class="card">
     <div class="dhead"><h3 style="margin:0">GAIN未入金 <span class="tag ${m.gainCheck === "has" ? "t-red" : m.gainCheck === "none" ? "t-green" : "t-gray"}">聞き取り：${CHECK[m.gainCheck || "unchecked"]}</span></h3>
       <div style="margin-left:auto;display:flex;gap:6px;flex-wrap:wrap">${Object.entries(CHECK).map(([k, v]) => `<button class="btn sm ${(m.gainCheck || "unchecked") === k ? "pri" : ""}" onclick="setCheck('${id}','${k}')">${v}</button>`).join("")}<button class="btn sm gold" onclick="openArrear('${id}')">＋ 追加</button></div></div>
-    ${subsOf(id).length ? `<div class="meta" style="margin-top:6px">フォームの回答：${subsOf(id).map(x => `${new Date(x.at).toLocaleDateString("ja-JP")} ${ANS[x.answer] || ""}${procLabel(x)}`).join("　/　")}</div>` : ""}
+    ${subsOf(id).length ? `<div style="margin-top:8px"><div class="meta">フォームの回答（押すと、会員が送った内容がそのまま見られます）</div>
+      ${subsOf(id).map((x, i) => `<details class="subd"><summary>${i + 1}回目　${new Date(x.at).toLocaleString("ja-JP", { year: "numeric", month: "numeric", day: "numeric", hour: "2-digit", minute: "2-digit" })}　<span class="tag ${x.answer === "has" ? "t-red" : x.answer === "none" ? "t-green" : "t-orange"}">${ANS[x.answer] || ""}</span> <span class="meta">${procLabel(x)}</span></summary>
+        <pre style="white-space:pre-wrap;font-family:inherit;font-size:13px;background:#faf9f5;border-radius:6px;padding:8px 10px;margin:6px 0 0">${esc(x.summary || "")}</pre></details>`).join("")}</div>` : ""}
     ${al.length ? `<div style="margin:8px 0 4px">未入金 <b class="red">${arrSum(al, "unpaid").toLocaleString()}円</b>${arrSum(al, "settled") ? `　<span class="meta">精算済み ${arrSum(al, "settled").toLocaleString()}円</span>` : ""}</div>${arrTable(al, id)}` : `<div class="empty">記録はありません</div>`}
   </div>`; })()}
   ${(() => { const lg = logsOf(id), w = warnCount(id); return `<div class="card">
