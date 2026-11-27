@@ -92,6 +92,9 @@ h3{font-size:15px;margin:0 0 8px}
 .iss-inline{border:1px solid var(--line);border-radius:10px;padding:14px;margin:4px 0 10px;background:#fff}
 .iss-dl{display:grid;grid-template-columns:auto 1fr;gap:4px 14px;margin:0 0 6px;font-size:14px}.iss-dl dt{color:#888;font-size:13px}.iss-dl dd{margin:0}
 .iss-sec{font-weight:700;font-size:13px;color:#555;margin:14px 0 6px;padding-top:10px;border-top:1px solid var(--line)}
+.sub-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(420px,1fr));gap:12px;margin-bottom:6px}
+.sub-card{border:1px solid var(--line);border-radius:10px;padding:12px 14px;background:#fff}
+@media (max-width:560px){.sub-grid{grid-template-columns:1fr}}
 .iss-plan{font-size:13px;white-space:pre-wrap;margin-top:3px;color:#444}
 .chip.on{background:var(--dark);color:#fff;border-color:var(--dark)}
 
@@ -1094,13 +1097,33 @@ function renderFormSubs() {
   Object.entries(state.formSubs || {}).forEach(([t, o]) => { const mid = state.formTokens[t]?.memberId; Object.entries(o || {}).forEach(([sid, x]) => { if (!x.processed) subs.push({ t, sid, mid, ...x }); }); });
   if (!subs.length) return "";
   subs.sort((a, b) => a.at - b.at);
+  const nth = x => subsOf(x.mid).findIndex(y => y.sid === x.sid) + 1; // その会員の何回目の回答か
+  const head = x => { const m = state.members[x.mid] || {}, n = nth(x);
+    return `<b>${esc(m.salonNo || "")} ${esc(m.name || "不明")}</b>${m.nick ? ` <span class="meta">（${esc(m.nick)}）</span>` : ""}
+      <span class="tag ${x.answer === "has" ? "t-red" : x.answer === "none" ? "t-green" : "t-orange"}">${ANS[x.answer] || ""}</span>${isLate(x) ? ` <span class="tag t-gray">期限後</span>` : ""}${n > 1 ? ` <span class="tag t-gray">${n}回目の回答</span>` : ""} <span class="meta">${new Date(x.at).toLocaleString("ja-JP", { month: "numeric", day: "numeric", hour: "2-digit", minute: "2-digit" })}</span>`; };
+  const btns = x => `<button class="btn sm gold" onclick="importSub('${x.t}','${x.sid}')">取り込む</button><button class="btn sm" onclick="dismissSub('${x.t}','${x.sid}')">取り込まずに処理済み</button>`;
+  const det = subs.filter(x => x.answer !== "none"), none = subs.filter(x => x.answer === "none");
   return `<div class="card" style="border-color:#ecd3a9"><h3>フォームの回答（未処理）<span class="cnt">${subs.length}</span><span class="meta" style="font-weight:400;margin-left:8px">内容を確認して「取り込む」を押すと、GAIN未入金に反映されます</span></h3>
-    ${subs.map(x => { const m = state.members[x.mid] || {};
-      return `<div class="row" style="align-items:flex-start"><div class="grow"><b>${esc(m.salonNo || "")} ${esc(m.name || "不明")}</b>${m.nick ? ` <span class="meta">（${esc(m.nick)}）</span>` : ""}
-        <span class="tag ${x.answer === "has" ? "t-red" : x.answer === "none" ? "t-green" : "t-orange"}">${ANS[x.answer] || ""}</span>${isLate(x) ? ` <span class="tag t-gray">期限後</span>` : ""}${subsOf(x.mid).length > 1 ? ` <span class="tag t-gray">${subsOf(x.mid).length}回目の回答</span>` : ""} <span class="meta">${new Date(x.at).toLocaleString("ja-JP")}</span>
-        <pre style="white-space:pre-wrap;font-family:inherit;font-size:13px;background:#faf9f5;border-radius:6px;padding:8px 10px;margin:6px 0 0">${esc(x.summary || "")}</pre></div>
-        <div style="display:flex;flex-direction:column;gap:6px"><button class="btn sm gold" onclick="importSub('${x.t}','${x.sid}')">取り込む</button><button class="btn sm" onclick="dismissSub('${x.t}','${x.sid}')">取り込まずに処理済み</button></div></div>`; }).join("")}
+    ${det.length ? `<div class="iss-sec" style="border:0;padding:0;margin-top:4px">該当あり・確認中（${det.length}件）</div>
+      <div class="sub-grid">${det.map(x => `<div class="sub-card"><div>${head(x)}</div>
+        <pre style="white-space:pre-wrap;font-family:inherit;font-size:13px;background:#faf9f5;border-radius:6px;padding:8px 10px;margin:6px 0 8px">${esc(x.summary || "")}</pre>
+        <div style="display:flex;gap:6px;flex-wrap:wrap">${btns(x)}</div></div>`).join("")}</div>` : ""}
+    ${none.length ? `<div class="iss-sec" style="display:flex;align-items:center;gap:10px">該当なし（${none.length}件）<button class="btn sm gold" style="margin-left:auto" onclick="importNoneAll()">該当なしを${none.length}件まとめて取り込む</button></div>
+      ${none.map(x => `<div class="row" style="padding:6px 0"><div class="grow">${head(x)}</div><div style="display:flex;gap:6px">${btns(x)}</div></div>`).join("")}` : ""}
   </div>`;
+}
+function importNoneAll() {
+  const list = [];
+  Object.entries(state.formSubs || {}).forEach(([t, o]) => Object.entries(o || {}).forEach(([sid, x]) => { if (!x.processed && x.answer === "none" && state.members[state.formTokens[t]?.memberId]) list.push({ t, sid, mid: state.formTokens[t].memberId }); }));
+  if (!list.length) return;
+  confirmBox(`該当なしの回答 ${list.length}件をまとめて取り込みます。それぞれの会員の聞き取りを「${CHECK.none}」にします。\n（テストの回答などが混ざっていたら、先に「取り込まずに処理済み」にしてください）`, async () => {
+    list.forEach(({ t, sid, mid }) => { state.formSubs[t][sid].processed = true; state.members[mid].gainCheck = "none"; });
+    render(); toast(`${list.length}件を取り込みました`);
+    for (const { t, sid, mid } of list) {
+      await save("PATCH", `members/${mid}`, { gainCheck: "none" });
+      await save("PATCH", `formSubs/${t}/${sid}`, { processed: true, processedAt: Date.now() });
+    }
+  });
 }
 async function importSub(t, sid) {
   const x = state.formSubs[t][sid], mid = state.formTokens[t]?.memberId, m = state.members[mid];
@@ -1117,13 +1140,31 @@ async function importSub(t, sid) {
       note: `${when} 回答フォームで申告${extra ? "（" + extra + "）" : ""}${x.memo ? "／補足：" + x.memo : ""}`, createdAt: Date.now(), by: auth?.email || "demo" };
   });
   const check = x.answer === "has" ? "has" : x.answer === "none" ? "none" : (m.gainCheck || "unchecked");
-  confirmBox(`${m.name}さんの回答（${ANS[x.answer]}）を取り込みます。${Object.keys(add).length ? `未入金 ${Object.keys(add).length}件を追加し、` : ""}聞き取りを「${CHECK[check]}」にします。`, async () => {
-    Object.assign(state.arrears, add); m.gainCheck = check; x.processed = true;
-    render(); toast("取り込みました");
-    if (Object.keys(add).length) await save("PATCH", "arrears", add);
-    await save("PATCH", `members/${mid}`, { gainCheck: check });
-    await save("PATCH", `formSubs/${t}/${sid}`, { processed: true, processedAt: Date.now() });
-  });
+  const ids = Object.keys(add);
+  if (!ids.length) {
+    confirmBox(`${m.name}さんの回答（${ANS[x.answer]}）を取り込みます。聞き取りを「${CHECK[check]}」にします。`, () => doImportSub(t, sid, mid, {}, check));
+    return;
+  }
+  ui.pendingImport = { t, sid, mid, add, check };
+  modal(`<h3>${esc(m.name)}さんの回答を取り込む</h3>
+    <p class="hint">GAIN未入金に追加するものにチェックを入れてください。間違った入力（例：商品欄にMNPの説明が書かれている）はチェックを外すと追加されません。</p>
+    ${ids.map(id => { const r = add[id]; return `<label class="chk" style="color:inherit;font-size:14px;display:flex;gap:8px;align-items:flex-start;margin:6px 0;padding:8px 10px;background:#faf9f5;border-radius:6px"><input type="checkbox" class="impChk" value="${id}" checked style="margin-top:3px"><span><b>${esc(r.item)}</b>　${r.qty != null ? r.qty + "個　" : ""}${r.amount != null ? yen(r.amount) : `<span class="meta">金額未確定</span>`}${r.date ? `　<span class="meta">${esc(r.date)}</span>` : ""}</span></label>`; }).join("")}
+    <p class="hint">聞き取りは「${CHECK[check]}」になります。金額や個数は、取り込んだあとに一覧から直せます。</p>
+    <div class="mact"><button class="btn" onclick="closeModal()">キャンセル</button><button class="btn pri" onclick="confirmImport()">取り込む</button></div>`);
+}
+function confirmImport() {
+  const p = ui.pendingImport; if (!p) return;
+  const keep = new Set([...document.querySelectorAll(".impChk:checked")].map(e => e.value)), add = {};
+  Object.entries(p.add).forEach(([id, r]) => { if (keep.has(id)) add[id] = r; });
+  closeModal(); doImportSub(p.t, p.sid, p.mid, add, p.check); ui.pendingImport = null;
+}
+async function doImportSub(t, sid, mid, add, check) {
+  const m = state.members[mid], x = state.formSubs[t][sid];
+  Object.assign(state.arrears, add); m.gainCheck = check; x.processed = true;
+  render(); toast(Object.keys(add).length ? `${Object.keys(add).length}件を取り込みました` : "取り込みました");
+  if (Object.keys(add).length) await save("PATCH", "arrears", add);
+  await save("PATCH", `members/${mid}`, { gainCheck: check });
+  await save("PATCH", `formSubs/${t}/${sid}`, { processed: true, processedAt: Date.now() });
 }
 function dismissSub(t, sid) {
   confirmBox("この回答を取り込まずに処理済みにしますか？（回答の内容は残ります）", async () => {
@@ -1375,7 +1416,7 @@ function delIssue(id) {
 function modal(html) { $("modalRoot").innerHTML = `<div class="ov" onclick="if(event.target===this)closeModal()"><div class="modal">${html}</div></div>`; }
 function closeModal() { $("modalRoot").innerHTML = ""; }
 function confirmBox(msg, ok) {
-  modal(`<h3>確認</h3><p>${esc(msg)}</p><div class="mact"><button class="btn" onclick="closeModal()">キャンセル</button><button class="btn pri" id="cfOk">OK</button></div>`);
+  modal(`<h3>確認</h3><p style="white-space:pre-wrap">${esc(msg)}</p><div class="mact"><button class="btn" onclick="closeModal()">キャンセル</button><button class="btn pri" id="cfOk">OK</button></div>`);
   $("cfOk").onclick = () => { closeModal(); ok(); };
 }
 
